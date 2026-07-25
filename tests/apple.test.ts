@@ -134,3 +134,33 @@ test("Apple Music matcher keeps ambiguity when cover art is missing", async () =
   assert.equal(result.status, "ambiguous");
   assert.equal(result.selectedId, undefined);
 });
+
+test("Apple Music matcher prefers the closest album across every candidate above threshold", async () => {
+  const { matchSingleTrack } = await loadMatcherModule();
+  const higherScores = Array.from({ length: 8 }, (_, index) => {
+    const candidate = appleSong(`higher-score-${index}`);
+    candidate.attributes.name = "Song Extended";
+    candidate.attributes.albumName = `Other Album ${index}`;
+    return candidate;
+  });
+  const closestAlbum = appleSong("closest-album");
+  closestAlbum.attributes.albumName = "Ｔａｒｇｅｔ Ａｌｂｕｍ - Single";
+
+  const result = await matchSingleTrack(
+    {
+      originalName: "Song Extended",
+      artists: ["Artist"],
+      albumName: "Target Album",
+      durationMs: 180_000,
+      source: { provider: "qq", raw: {} }
+    },
+    [...higherScores, closestAlbum],
+    "us",
+    tiePrefs()
+  );
+
+  assert.equal(result.status, "matched");
+  assert.equal(result.selectedId, "closest-album");
+  assert.ok(result.candidates?.some((candidate) => candidate.id === "closest-album"));
+  assert.match(result.reason ?? "", /album similarity/);
+});

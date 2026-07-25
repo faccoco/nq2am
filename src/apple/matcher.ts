@@ -17,8 +17,44 @@ const MAX_CANDIDATES = 8;
 /** Tokens that indicate a non-original version (used by preferOriginalVersion). */
 const VERSION_TOKENS = ["remaster", "remastered", "live", "karaoke", "instrumental", "cover", "version", "remix"];
 
+type ScoredCandidate = AppleCandidate & { albumName: string };
+
 function normalizeText(s: string): string {
   return s.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
+}
+
+function normalizeAlbumText(s: string): string {
+  return normalizeText(s.normalize("NFKC"));
+}
+
+function editDistance(a: string, b: string): number {
+  const left = Array.from(a);
+  const right = Array.from(b);
+  let previous = Array.from({ length: right.length + 1 }, (_, index) => index);
+
+  for (let leftIndex = 1; leftIndex <= left.length; leftIndex += 1) {
+    const current = [leftIndex];
+    for (let rightIndex = 1; rightIndex <= right.length; rightIndex += 1) {
+      const substitutionCost = left[leftIndex - 1] === right[rightIndex - 1] ? 0 : 1;
+      current[rightIndex] = Math.min(
+        current[rightIndex - 1] + 1,
+        previous[rightIndex] + 1,
+        previous[rightIndex - 1] + substitutionCost
+      );
+    }
+    previous = current;
+  }
+
+  return previous[right.length];
+}
+
+function albumSimilarity(sourceAlbum: string, candidateAlbum: string): number {
+  const source = normalizeAlbumText(sourceAlbum);
+  const candidate = normalizeAlbumText(candidateAlbum);
+  if (source === candidate) {
+    return 1;
+  }
+  return 1 - editDistance(source, candidate) / Math.max(Array.from(source).length, Array.from(candidate).length);
 }
 
 /**
@@ -56,7 +92,7 @@ function buildArtworkUrl(song: AppleSong): string | undefined {
   return art.url.replace("{w}", "200").replace("{h}", "200");
 }
 
-function toCandidate(song: AppleSong, score: number, storefront: string): AppleCandidate {
+function toCandidate(song: AppleSong, score: number, storefront: string): ScoredCandidate {
   return {
     id: song.id,
     name: song.attributes.name,
@@ -150,6 +186,37 @@ function matchedResult(track: NormalizedTrack, candidates: AppleCandidate[], win
   };
 }
 
+function sharedRecordingIsrc(candidates: AppleCandidate[]): string | undefined {
+  const isrc = candidates[0].isrc;
+  return isrc && candidates.every((candidate) => candidate.isrc === isrc) ? isrc : undefined;
+}
+
+function chooseByAlbumSimilarity(
+  sourceAlbum: string,
+  candidates: ScoredCandidate[]
+): { candidate: ScoredCandidate; similarity: number } {
+  let candidate = candidates[0];
+  let similarity = albumSimilarity(sourceAlbum, candidate.albumName);
+
+  for (const current of candidates.slice(1)) {
+    const currentSimilarity = albumSimilarity(sourceAlbum, current.albumName);
+    if (currentSimilarity > similarity || (currentSimilarity === similarity && current.score > candidate.score)) {
+      candidate = current;
+      similarity = currentSimilarity;
+    }
+  }
+
+  return { candidate, similarity };
+}
+
+function retainCandidates(ranked: ScoredCandidate[], winner: ScoredCandidate): ScoredCandidate[] {
+  const retained = ranked.slice(0, MAX_CANDIDATES);
+  if (retained.some((candidate) => candidate.id === winner.id)) {
+    return retained;
+  }
+  return [...retained.slice(0, MAX_CANDIDATES - 1), winner];
+}
+
 export async function matchSingleTrack(
   track: NormalizedTrack,
   results: AppleSong[],
@@ -160,17 +227,16 @@ export async function matchSingleTrack(
     return { track, status: "not_found", candidates: [], reason: "No results from Apple Music search" };
   }
 
-  const scored = results
-    .map((song) => {
-      const score = applyRules(baseScore(track, song), track, song, prefs);
-      return toCandidate(song, score, storefront);
-    })
-    .sort((a, b) => {
-      if (b.score !== a.score) return b.score - a.score;
-      // Equal score → apply explicit/clean preference as a tie-break.
-      return explicitRank(b, prefs) - explicitRank(a, prefs);
-    })
-    .slice(0, MAX_CANDIDATES);
+  const searchOrderCandidates = results.map((song) => {
+    const score = applyRules(baseScore(track, song), track, song, prefs);
+    return toCandidate(song, score, storefront);
+  });
+  const ranked = [...searchOrderCandidates].sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    // Equal score → apply explicit/clean preference as a tie-break.
+    return explicitRank(b, prefs) - explicitRank(a, prefs);
+  });
+  const scored = ranked.slice(0, MAX_CANDIDATES);
 
   const best = scored[0];
 
@@ -180,6 +246,16 @@ export async function matchSingleTrack(
       status: "not_found",
       candidates: scored,
       reason: `Best match score ${best.score.toFixed(2)} below threshold ${prefs.threshold.toFixed(2)}`
+    };
+  }
+
+  if (track.albumName) {
+    const eligible = searchOrderCandidates.filter((candidate) => candidate.score >= prefs.threshold);
+    const albumChoice = chooseByAlbumSimilarity(track.albumName, eligible);
+    const candidates = retainCandidates(ranked, albumChoice.candidate);
+    return {
+      ...matchedResult(track, candidates, albumChoice.candidate),
+      reason: `Selected by album similarity (${albumChoice.similarity.toFixed(2)})`
     };
   }
 
@@ -196,6 +272,14 @@ export async function matchSingleTrack(
     }
 
     const nearTied = scored.filter((candidate) => best.score - candidate.score < prefs.ambiguousGap);
+    const sharedIsrc = sharedRecordingIsrc(nearTied);
+    if (sharedIsrc) {
+      return {
+        ...matchedResult(track, scored, best),
+        reason: `Equivalent releases share ISRC ${sharedIsrc}`
+      };
+    }
+
     const coverChoice = await chooseByCoverSimilarity(track, nearTied);
     if (coverChoice) {
       return {
