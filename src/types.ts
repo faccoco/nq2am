@@ -125,6 +125,24 @@ export type MatchPreferences = {
    * - "text": infer purely from the track text (kana→jp, hangul→kr, han→jp).
    */
   cjkDetection: "source" | "text";
+  /** Maximum number of source tracks evaluated concurrently. */
+  matchConcurrency: number;
+  /** Minimum delay between Apple API request starts. */
+  appleRequestIntervalMs: number;
+  /** Timeout applied to each Apple catalog request. */
+  appleRequestTimeoutMs: number;
+  /** Total attempts allowed for a transient Apple request failure. */
+  appleMaxAttempts: number;
+  /** Initial exponential-backoff delay after a transient failure. */
+  appleRetryBaseDelayMs: number;
+  /** Add a randomized pause between Apple API request starts. */
+  appleRandomPauseEnabled: boolean;
+  /** Minimum additional randomized pause. */
+  appleRandomPauseMinMs: number;
+  /** Maximum additional randomized pause. */
+  appleRandomPauseMaxMs: number;
+  /** Timeout applied independently to artwork download and decode operations. */
+  artworkTimeoutMs: number;
 };
 
 export const DEFAULT_MATCH_PREFERENCES: MatchPreferences = {
@@ -135,7 +153,16 @@ export const DEFAULT_MATCH_PREFERENCES: MatchPreferences = {
   preferOriginalVersion: true,
   storefront: "",
   nativeSearch: true,
-  cjkDetection: "source"
+  cjkDetection: "source",
+  matchConcurrency: 3,
+  appleRequestIntervalMs: 150,
+  appleRequestTimeoutMs: 15_000,
+  appleMaxAttempts: 3,
+  appleRetryBaseDelayMs: 750,
+  appleRandomPauseEnabled: false,
+  appleRandomPauseMinMs: 250,
+  appleRandomPauseMaxMs: 750,
+  artworkTimeoutMs: 8_000
 };
 
 export type FetchOptions = {

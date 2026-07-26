@@ -1,3 +1,4 @@
+import { performance } from "node:perf_hooks";
 import { loadCookies } from "../fetchers/auth.js";
 import { getNotFoundIndices } from "../matchFilters.js";
 import {
@@ -9,12 +10,87 @@ import {
   type NormalizedPlaylist,
   type NormalizedTrack
 } from "../types.js";
-import { type AppleSong, appleCreatePlaylist, appleGetStorefront, appleSearch, appleSongsByIsrc } from "./api.js";
-import { chooseByCoverSimilarity } from "./artwork.js";
+import {
+  type AppleApiRequestMetric,
+  type AppleApiSession,
+  type AppleApiSessionOptions,
+  type AppleSong,
+  appleCreatePlaylist,
+  createAppleApiSession
+} from "./api.js";
+import {
+  type ArtworkComparator,
+  type ArtworkComparatorOptions,
+  type CandidateSimilarity,
+  chooseByCoverSimilarity,
+  createArtworkComparator
+} from "./artwork.js";
+import { mapWithConcurrency } from "./concurrency.js";
 import { albumSimilarity, compactAlbumText, compactText, scoreAppleSong } from "./scoring.js";
 
 /** Number of candidates kept per track so the user can override the pick. */
 const MAX_CANDIDATES = 8;
+
+export type AppleMatchLogEvent = {
+  event: "request" | "stage" | "job_complete";
+  jobId?: string;
+  stage?: "session" | "search" | "candidate_evaluation" | "artwork" | "isrc" | "track" | "job";
+  trackIndex?: number;
+  durationMs: number;
+  outcome?: "success" | "error";
+  operation?: AppleApiRequestMetric["operation"];
+  attempt?: number;
+  status?: number;
+  processedTracks?: number;
+  requestCount?: number;
+  retryCount?: number;
+};
+
+export type AppleMatchExecutionOptions = {
+  concurrency?: number;
+  logger?: (event: AppleMatchLogEvent) => void;
+  sessionFactory?: (options: AppleApiSessionOptions) => Promise<AppleApiSession>;
+  artworkComparatorFactory?: (options: ArtworkComparatorOptions) => ArtworkComparator;
+};
+
+type CoverSimilarityChooser = (
+  track: NormalizedTrack,
+  candidates: AppleCandidate[]
+) => Promise<CandidateSimilarity | undefined>;
+
+function defaultMatchLogger(event: AppleMatchLogEvent): void {
+  process.stderr.write(`[apple-match] ${JSON.stringify(event)}\n`);
+}
+
+function safeLogger(logger: (event: AppleMatchLogEvent) => void): (event: AppleMatchLogEvent) => void {
+  return (event) => {
+    try {
+      logger(event);
+    } catch {
+      // Diagnostics must never change matching behavior.
+    }
+  };
+}
+
+function durationSince(startedAt: number): number {
+  return Math.round((performance.now() - startedAt) * 100) / 100;
+}
+
+function apiSessionOptions(
+  prefs: MatchPreferences,
+  onRequest?: AppleApiSessionOptions["onRequest"]
+): AppleApiSessionOptions {
+  return {
+    requestTimeoutMs: prefs.appleRequestTimeoutMs,
+    minRequestIntervalMs: prefs.appleRequestIntervalMs,
+    maxAttempts: prefs.appleMaxAttempts,
+    baseRetryDelayMs: prefs.appleRetryBaseDelayMs,
+    randomPauseEnabled: prefs.appleRandomPauseEnabled,
+    randomPauseMinMs: prefs.appleRandomPauseMinMs,
+    randomPauseMaxMs: prefs.appleRandomPauseMaxMs,
+    onRequest
+  };
+}
 
 /**
  * Pick the Apple Music storefront whose catalog best holds a track's original
@@ -268,7 +344,8 @@ export async function matchSingleTrack(
   track: NormalizedTrack,
   results: AppleSong[],
   storefront: string,
-  prefs: MatchPreferences
+  prefs: MatchPreferences,
+  chooseCover: CoverSimilarityChooser = chooseByCoverSimilarity
 ): Promise<AppleMatchResult> {
   if (results.length === 0) {
     return { track, status: "not_found", candidates: [], reason: "No results from Apple Music search" };
@@ -363,7 +440,7 @@ export async function matchSingleTrack(
       );
     }
 
-    const coverChoice = await chooseByCoverSimilarity(track, nearTied);
+    const coverChoice = await chooseCover(track, nearTied);
     if (coverChoice) {
       return matchedResult(
         track,
@@ -384,28 +461,32 @@ export async function matchSingleTrack(
   return matchedResult(track, scored, best, `Selected best match (${scoreGapReason(best, second, prefs)})`);
 }
 
-/**
- * Resolve the account-store (addable) id for each candidate via its ISRC, when
- * the candidate came from a different (native) store. Mutates candidates in
- * place, setting `addableId`. Best-effort: failures leave addableId undefined
- * and are tolerated (the candidate id is used as a fallback at creation time).
- */
-async function bridgeCandidatesToAccountStore(candidates: AppleCandidate[], accountStore: string): Promise<void> {
-  for (const c of candidates) {
-    if (c.storefront === accountStore) {
-      c.addableId = c.id;
-      continue;
-    }
-    if (!c.isrc) continue;
-    try {
-      const matches = await appleSongsByIsrc(c.isrc, accountStore);
-      if (matches.length > 0) {
-        c.addableId = matches[0].id;
-      }
-    } catch {
-      // leave addableId undefined; createPlaylist falls back to c.id
-    }
+async function resolveCandidateId(
+  candidate: AppleCandidate,
+  accountStore: string,
+  session: AppleApiSession
+): Promise<string> {
+  if (candidate.addableId) {
+    return candidate.addableId;
   }
+  if (!candidate.storefront || candidate.storefront === accountStore) {
+    candidate.addableId = candidate.id;
+    return candidate.id;
+  }
+  if (!candidate.isrc) {
+    return candidate.id;
+  }
+
+  try {
+    const matches = await session.songsByIsrc(candidate.isrc, accountStore);
+    if (matches.length > 0) {
+      candidate.addableId = matches[0].id;
+      return candidate.addableId;
+    }
+  } catch {
+    // Bridging is best-effort. Playlist creation retains the existing fallback.
+  }
+  return candidate.id;
 }
 
 /**
@@ -416,24 +497,69 @@ async function bridgeCandidatesToAccountStore(candidates: AppleCandidate[], acco
  */
 async function processTrack(
   track: NormalizedTrack,
+  trackIndex: number,
   accountStore: string,
-  prefs: MatchPreferences
+  prefs: MatchPreferences,
+  session: AppleApiSession,
+  artworkComparator: ArtworkComparator,
+  logger: (event: AppleMatchLogEvent) => void,
+  jobId: string | undefined
 ): Promise<AppleMatchResult> {
   const query = `${track.originalName} ${track.artists[0] ?? ""}`.trim();
   const nativeStore = prefs.nativeSearch ? detectStorefrontForTrack(track, prefs.cjkDetection) : undefined;
   const searchStore = nativeStore && nativeStore !== accountStore ? nativeStore : accountStore;
 
-  const songs = await appleSearch(query, searchStore);
-  const result = await matchSingleTrack(track, songs, searchStore, prefs);
+  const searchStartedAt = performance.now();
+  const songs = await session.search(query, searchStore);
+  logger({
+    event: "stage",
+    jobId,
+    stage: "search",
+    trackIndex,
+    durationMs: durationSince(searchStartedAt),
+    outcome: "success"
+  });
 
-  // Bridge to the account store only when we searched a different region.
-  if (searchStore !== accountStore && result.candidates && result.candidates.length > 0) {
-    await bridgeCandidatesToAccountStore(result.candidates, accountStore);
-    // Re-point the auto-selected id to its addable counterpart when resolved.
-    if (result.selectedId) {
-      const sel = result.candidates.find((c) => c.id === result.selectedId);
-      if (sel?.addableId) {
-        result.appleMusicId = sel.addableId;
+  const evaluationStartedAt = performance.now();
+  const result = await matchSingleTrack(track, songs, searchStore, prefs, async (sourceTrack, candidates) => {
+    const artworkStartedAt = performance.now();
+    try {
+      return await artworkComparator.choose(sourceTrack, candidates);
+    } finally {
+      logger({
+        event: "stage",
+        jobId,
+        stage: "artwork",
+        trackIndex,
+        durationMs: durationSince(artworkStartedAt)
+      });
+    }
+  });
+  logger({
+    event: "stage",
+    jobId,
+    stage: "candidate_evaluation",
+    trackIndex,
+    durationMs: durationSince(evaluationStartedAt),
+    outcome: "success"
+  });
+
+  if (result.selectedId && result.candidates) {
+    const selected = result.candidates.find((candidate) => candidate.id === result.selectedId);
+    if (selected) {
+      if (searchStore === accountStore) {
+        selected.addableId = selected.id;
+      } else {
+        const isrcStartedAt = performance.now();
+        result.appleMusicId = await resolveCandidateId(selected, accountStore, session);
+        logger({
+          event: "stage",
+          jobId,
+          stage: "isrc",
+          trackIndex,
+          durationMs: durationSince(isrcStartedAt),
+          outcome: selected.addableId ? "success" : "error"
+        });
       }
     }
   }
@@ -452,53 +578,132 @@ async function processTrack(
 export async function matchAppleMusic(
   playlist: NormalizedPlaylist,
   prefs: MatchPreferences = DEFAULT_MATCH_PREFERENCES,
-  onProgress?: (processed: number, total: number, result: AppleMatchResult) => void
+  onProgress?: (processed: number, total: number, result: AppleMatchResult) => void,
+  execution: AppleMatchExecutionOptions = {}
 ): Promise<AppleMatchReport> {
-  const cookies = await loadCookies("apple");
-  if (!cookies || cookies.length === 0) {
+  if (!execution.sessionFactory) {
+    const cookies = await loadCookies("apple");
+    if (!cookies || cookies.length === 0) {
+      return {
+        provider: playlist.provider,
+        playlistId: playlist.id,
+        playlistName: playlist.name,
+        results: playlist.tracks.map((track) => ({
+          track,
+          status: "not_implemented",
+          reason: "Not logged in to Apple Music. Please log in from Settings."
+        }))
+      };
+    }
+  }
+
+  const logger = safeLogger(execution.logger ?? defaultMatchLogger);
+  const sessionFactory = execution.sessionFactory ?? createAppleApiSession;
+  const artworkComparatorFactory = execution.artworkComparatorFactory ?? createArtworkComparator;
+  const jobStartedAt = performance.now();
+  const jobId = playlist.id;
+  let session: AppleApiSession;
+  const sessionStartedAt = performance.now();
+  try {
+    session = await sessionFactory(
+      apiSessionOptions(prefs, (metric) => {
+        logger({
+          event: "request",
+          jobId,
+          durationMs: Math.round(metric.durationMs * 100) / 100,
+          operation: metric.operation,
+          attempt: metric.attempt,
+          outcome: metric.outcome,
+          status: metric.status
+        });
+      })
+    );
+    logger({
+      event: "stage",
+      jobId,
+      stage: "session",
+      durationMs: durationSince(sessionStartedAt),
+      outcome: "success"
+    });
+  } catch (error) {
+    logger({
+      event: "stage",
+      jobId,
+      stage: "session",
+      durationMs: durationSince(sessionStartedAt),
+      outcome: "error"
+    });
     return {
       provider: playlist.provider,
       playlistId: playlist.id,
       playlistName: playlist.name,
       results: playlist.tracks.map((track) => ({
         track,
-        status: "not_implemented",
-        reason: "Not logged in to Apple Music. Please log in from Settings."
+        status: "not_found",
+        candidates: [],
+        reason: (error as Error).message
       }))
     };
   }
 
-  // Resolve the account storefront: explicit override wins, else auto-detect.
-  let accountStore = prefs.storefront.trim();
-  if (!accountStore) {
-    try {
-      accountStore = await appleGetStorefront();
-    } catch {
-      accountStore = "us";
+  const artworkComparator = artworkComparatorFactory({ timeoutMs: prefs.artworkTimeoutMs });
+  try {
+    let accountStore = prefs.storefront.trim();
+    if (!accountStore) {
+      try {
+        accountStore = await session.getStorefront();
+      } catch {
+        accountStore = "us";
+      }
     }
-  }
 
-  const total = playlist.tracks.length;
-  const results: AppleMatchResult[] = [];
-  for (const track of playlist.tracks) {
-    let result: AppleMatchResult;
-    try {
-      result = await processTrack(track, accountStore, prefs);
-    } catch (error) {
-      result = { track, status: "not_found", candidates: [], reason: (error as Error).message };
-    }
-    results.push(result);
-    onProgress?.(results.length, total, result);
-    // Small delay to respect rate limits
-    await new Promise((resolve) => setTimeout(resolve, 200));
-  }
+    const total = playlist.tracks.length;
+    const results = await mapWithConcurrency(
+      playlist.tracks,
+      execution.concurrency ?? prefs.matchConcurrency,
+      async (track, trackIndex): Promise<AppleMatchResult> => {
+        const trackStartedAt = performance.now();
+        let outcome: "success" | "error" = "success";
+        try {
+          return await processTrack(track, trackIndex, accountStore, prefs, session, artworkComparator, logger, jobId);
+        } catch (error) {
+          outcome = "error";
+          return { track, status: "not_found", candidates: [], reason: (error as Error).message };
+        } finally {
+          logger({
+            event: "stage",
+            jobId,
+            stage: "track",
+            trackIndex,
+            durationMs: durationSince(trackStartedAt),
+            outcome
+          });
+        }
+      },
+      (result, _index, completed) => {
+        onProgress?.(completed, total, result);
+      }
+    );
 
-  return {
-    provider: playlist.provider,
-    playlistId: playlist.id,
-    playlistName: playlist.name,
-    results
-  };
+    return {
+      provider: playlist.provider,
+      playlistId: playlist.id,
+      playlistName: playlist.name,
+      results
+    };
+  } finally {
+    await Promise.allSettled([artworkComparator.close(), session.close()]);
+    const stats = session.getStats();
+    logger({
+      event: "job_complete",
+      jobId,
+      stage: "job",
+      durationMs: durationSince(jobStartedAt),
+      processedTracks: playlist.tracks.length,
+      requestCount: stats.requestCount,
+      retryCount: stats.retryCount
+    });
+  }
 }
 
 /**
@@ -509,16 +714,18 @@ export async function matchAppleMusic(
 export async function retryNotFoundAppleMusic(
   report: AppleMatchReport,
   prefs: MatchPreferences = DEFAULT_MATCH_PREFERENCES,
-  onProgress?: (processed: number, total: number, result: AppleMatchResult) => void
+  onProgress?: (processed: number, total: number, result: AppleMatchResult) => void,
+  execution: AppleMatchExecutionOptions = {}
 ): Promise<AppleMatchReport> {
-  return retryAppleMusicResults(report, getNotFoundIndices(report.results), prefs, onProgress);
+  return retryAppleMusicResults(report, getNotFoundIndices(report.results), prefs, onProgress, execution);
 }
 
 export async function retryAppleMusicResults(
   report: AppleMatchReport,
   indices: readonly number[],
   prefs: MatchPreferences = DEFAULT_MATCH_PREFERENCES,
-  onProgress?: (processed: number, total: number, result: AppleMatchResult) => void
+  onProgress?: (processed: number, total: number, result: AppleMatchResult) => void,
+  execution: AppleMatchExecutionOptions = {}
 ): Promise<AppleMatchReport> {
   const retryIndices = Array.from(new Set(indices)).filter(
     (idx) => Number.isInteger(idx) && idx >= 0 && idx < report.results.length
@@ -534,7 +741,7 @@ export async function retryAppleMusicResults(
     tracks: retryIndices.map((idx) => report.results[idx].track),
     raw: {}
   };
-  const retryReport = await matchAppleMusic(retryPlaylist, prefs, onProgress);
+  const retryReport = await matchAppleMusic(retryPlaylist, prefs, onProgress, execution);
   const results = report.results.slice();
   for (const [pos, idx] of retryIndices.entries()) {
     const next = retryReport.results[pos];
@@ -555,28 +762,55 @@ export async function refreshAppleMatchReportCandidates(
 ): Promise<AppleMatchReport> {
   const results: AppleMatchResult[] = [];
   let changed = false;
+  const artworkComparator = createArtworkComparator({ timeoutMs: prefs.artworkTimeoutMs });
 
-  for (const result of report.results) {
-    if (!shouldRefreshExistingCandidates(result)) {
-      results.push(result);
-      continue;
-    }
+  try {
+    for (const result of report.results) {
+      if (!shouldRefreshExistingCandidates(result)) {
+        results.push(result);
+        continue;
+      }
 
-    try {
-      const storefront = result.candidates.find((candidate) => candidate.storefront)?.storefront ?? prefs.storefront;
-      const songs = result.candidates.map(candidateToSong);
-      const refreshed = mergePreservedCandidateFields(
-        await matchSingleTrack(result.track, songs, storefront || "us", prefs),
-        result.candidates
-      );
-      results.push(refreshed);
-      changed ||= resultChanged(result, refreshed);
-    } catch {
-      results.push(result);
+      try {
+        const storefront = result.candidates.find((candidate) => candidate.storefront)?.storefront ?? prefs.storefront;
+        const songs = result.candidates.map(candidateToSong);
+        const refreshed = mergePreservedCandidateFields(
+          await matchSingleTrack(result.track, songs, storefront || "us", prefs, (track, candidates) =>
+            artworkComparator.choose(track, candidates)
+          ),
+          result.candidates
+        );
+        results.push(refreshed);
+        changed ||= resultChanged(result, refreshed);
+      } catch {
+        results.push(result);
+      }
     }
+  } finally {
+    await artworkComparator.close();
   }
 
   return changed ? { ...report, results } : report;
+}
+
+export async function resolveAppleMusicTrackIds(
+  report: AppleMatchReport,
+  accountStore: string,
+  session: AppleApiSession,
+  concurrency = DEFAULT_MATCH_PREFERENCES.matchConcurrency
+): Promise<string[]> {
+  const matched = report.results.filter((result) => result.status === "matched");
+  const resolved = await mapWithConcurrency(matched, concurrency, async (result) => {
+    const selected = result.candidates?.find((candidate) => candidate.id === result.selectedId);
+    if (!selected) {
+      return result.appleMusicId;
+    }
+
+    const id = await resolveCandidateId(selected, accountStore, session);
+    result.appleMusicId = id;
+    return id;
+  });
+  return resolved.filter((id): id is string => Boolean(id));
 }
 
 /**
@@ -584,4 +818,33 @@ export async function refreshAppleMatchReportCandidates(
  */
 export async function createAppleMusicPlaylist(name: string, description: string, trackIds: string[]): Promise<string> {
   return appleCreatePlaylist(name, description, trackIds);
+}
+
+export async function createAppleMusicPlaylistFromReport(
+  report: AppleMatchReport,
+  prefs: MatchPreferences,
+  name: string,
+  description: string,
+  execution: AppleMatchExecutionOptions = {}
+): Promise<string> {
+  const sessionFactory = execution.sessionFactory ?? createAppleApiSession;
+  const session = await sessionFactory(apiSessionOptions(prefs));
+  try {
+    let accountStore = prefs.storefront.trim();
+    if (!accountStore) {
+      accountStore = await session.getStorefront().catch(() => "us");
+    }
+    const trackIds = await resolveAppleMusicTrackIds(
+      report,
+      accountStore,
+      session,
+      execution.concurrency ?? prefs.matchConcurrency
+    );
+    if (trackIds.length === 0) {
+      throw new Error("No matched tracks to add to playlist");
+    }
+    return session.createPlaylist(name, description, trackIds);
+  } finally {
+    await session.close();
+  }
 }

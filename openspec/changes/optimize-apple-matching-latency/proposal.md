@@ -20,6 +20,10 @@ matching score calculation, especially on remote servers.
 - Process independent tracks with conservative bounded concurrency and a
   centralized rate limiter, including retry/backoff behavior for transient
   Apple API failures and rate-limit responses.
+- Expose concurrency, request pacing, timeout, retry, and artwork timeout
+  controls in the bilingual Settings UI.
+- Optionally add a user-configured random pause range on top of the fixed
+  request interval so request timing is less mechanical.
 - Reuse artwork-processing resources and cache downloaded or computed artwork
   features within a job.
 - Apply explicit timeouts to catalog requests and artwork processing so one
@@ -44,9 +48,10 @@ None.
 ## Impact
 
 The primary implementation areas are `src/apple/api.ts`,
-`src/apple/matcher.ts`, `src/apple/artwork.ts`, and the server-side match task
-runner. Internal Apple request lifecycle and scheduling will change, but the
-HTTP API and saved match-report format should remain backward compatible.
-Tests will need deterministic coverage for concurrency limits, lazy ISRC
-resolution, timeout handling, and unchanged match decisions. No new runtime
-dependency is expected.
+`src/apple/matcher.ts`, `src/apple/artwork.ts`, the server-side preferences and
+match task runners, and the Matching section of the Settings UI. Internal Apple
+request lifecycle and scheduling will change, but the saved match-report format
+remains backward compatible. Existing preferences are extended with sanitized
+defaults. Tests need deterministic coverage for concurrency limits, lazy ISRC
+resolution, timeout handling, random pacing, preference migration, and
+unchanged match decisions. No new runtime dependency is expected.

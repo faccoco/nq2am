@@ -1,4 +1,4 @@
-import { chromium } from "playwright";
+import { type Browser, chromium, type Page } from "playwright";
 import type { AppleCandidate, NormalizedTrack } from "../types.js";
 
 type ArtworkFeature = {
@@ -6,9 +6,24 @@ type ArtworkFeature = {
   avg: [number, number, number];
 };
 
-type CandidateSimilarity = {
+export type CandidateSimilarity = {
   candidate: AppleCandidate;
   similarity: number;
+};
+
+export type ArtworkComparatorStats = {
+  featureComputations: number;
+  cacheHits: number;
+};
+
+export type ArtworkComparator = {
+  choose(track: NormalizedTrack, candidates: AppleCandidate[]): Promise<CandidateSimilarity | undefined>;
+  getStats(): ArtworkComparatorStats;
+  close(): Promise<void>;
+};
+
+export type ArtworkComparatorOptions = {
+  timeoutMs?: number;
 };
 
 type FeatureComparison = {
@@ -26,84 +41,238 @@ type SvgRectFeature = {
 
 const FEATURE_SIZE = 32;
 const HASH_SIZE = 8;
-const FETCH_TIMEOUT_MS = 8_000;
+const DEFAULT_TIMEOUT_MS = 8_000;
 const MIN_SIMILARITY = 0.74;
 const MIN_SIMILARITY_MARGIN = 0.08;
 
+class JobArtworkComparator implements ArtworkComparator {
+  private readonly featureCache = new Map<string, Promise<ArtworkFeature | undefined>>();
+  private browserPromise?: Promise<Browser>;
+  private pagePromise?: Promise<Page>;
+  private featureComputations = 0;
+  private cacheHits = 0;
+
+  constructor(private readonly timeoutMs: number) {}
+
+  async choose(track: NormalizedTrack, candidates: AppleCandidate[]): Promise<CandidateSimilarity | undefined> {
+    if (!track.albumCoverUrl || candidates.length < 2) {
+      return undefined;
+    }
+
+    const comparable = candidates.filter((candidate) => candidate.artworkUrl);
+    if (comparable.length < 2) {
+      return undefined;
+    }
+
+    try {
+      const urls = [track.albumCoverUrl, ...comparable.map((candidate) => candidate.artworkUrl as string)];
+      const features = await Promise.all(urls.map((url) => this.getFeature(url)));
+      const source = features[0];
+      if (!source) {
+        return undefined;
+      }
+
+      const scored = comparable
+        .map((candidate, index) => {
+          const feature = features[index + 1];
+          const comparison = feature ? compareFeatures(source, feature) : undefined;
+          return feature
+            ? {
+                candidate,
+                similarity: comparison?.similarity ?? 0,
+                colorSimilarity: comparison?.colorSimilarity ?? 0
+              }
+            : undefined;
+        })
+        .filter((item): item is CandidateSimilarity & { colorSimilarity: number } => item !== undefined)
+        .sort((a, b) => b.similarity - a.similarity);
+
+      const best = scored[0];
+      const second = scored[1];
+      if (!best || !second) {
+        return undefined;
+      }
+      if (best.similarity < MIN_SIMILARITY) {
+        return undefined;
+      }
+      if (best.similarity - second.similarity < MIN_SIMILARITY_MARGIN) {
+        return undefined;
+      }
+      if (best.colorSimilarity - second.colorSimilarity < MIN_SIMILARITY_MARGIN) {
+        return undefined;
+      }
+
+      return best;
+    } catch {
+      return undefined;
+    }
+  }
+
+  getStats(): ArtworkComparatorStats {
+    return {
+      featureComputations: this.featureComputations,
+      cacheHits: this.cacheHits
+    };
+  }
+
+  async close(): Promise<void> {
+    const page = await this.pagePromise?.catch(() => undefined);
+    await page?.close().catch(() => {});
+    const browser = await this.browserPromise?.catch(() => undefined);
+    await browser?.close().catch(() => {});
+  }
+
+  private getFeature(url: string): Promise<ArtworkFeature | undefined> {
+    const cached = this.featureCache.get(url);
+    if (cached) {
+      this.cacheHits += 1;
+      return cached;
+    }
+
+    this.featureComputations += 1;
+    const feature = this.computeFeature(url);
+    this.featureCache.set(url, feature);
+    return feature;
+  }
+
+  private async computeFeature(url: string): Promise<ArtworkFeature | undefined> {
+    const inlineSvgFeature = featureFromSvgDataUrl(url);
+    if (inlineSvgFeature) {
+      return inlineSvgFeature;
+    }
+
+    const dataUrl = await loadImageDataUrl(url, this.timeoutMs);
+    if (!dataUrl) {
+      return undefined;
+    }
+
+    const downloadedSvgFeature = featureFromSvgDataUrl(dataUrl);
+    if (downloadedSvgFeature) {
+      return downloadedSvgFeature;
+    }
+
+    return this.extractFeature(dataUrl);
+  }
+
+  private async getPage(): Promise<Page> {
+    this.browserPromise ??= chromium.launch({ headless: true });
+    this.pagePromise ??= this.browserPromise.then((browser) => browser.newPage());
+    return this.pagePromise;
+  }
+
+  private async extractFeature(dataUrl: string): Promise<ArtworkFeature | undefined> {
+    const page = await this.getPage();
+    return page.evaluate(
+      async ({ src, size, hashSize, decodeTimeoutMs }) => {
+        function loadImage(url: string): Promise<HTMLImageElement> {
+          return new Promise((resolve, reject) => {
+            const image = new Image();
+            const timer = window.setTimeout(() => reject(new Error("image decode timed out")), decodeTimeoutMs);
+            image.onload = () => {
+              window.clearTimeout(timer);
+              resolve(image);
+            };
+            image.onerror = () => {
+              window.clearTimeout(timer);
+              reject(new Error("image decode failed"));
+            };
+            image.src = url;
+          });
+        }
+
+        function lowFrequencyDct(values: number[], imageSize: number, outputSize: number) {
+          const coefficients: number[] = [];
+          for (let v = 0; v < outputSize; v += 1) {
+            for (let u = 0; u < outputSize; u += 1) {
+              let sum = 0;
+              for (let y = 0; y < imageSize; y += 1) {
+                for (let x = 0; x < imageSize; x += 1) {
+                  sum +=
+                    values[y * imageSize + x] *
+                    Math.cos(((2 * x + 1) * u * Math.PI) / (2 * imageSize)) *
+                    Math.cos(((2 * y + 1) * v * Math.PI) / (2 * imageSize));
+                }
+              }
+              const cu = u === 0 ? 1 / Math.sqrt(2) : 1;
+              const cv = v === 0 ? 1 / Math.sqrt(2) : 1;
+              coefficients.push((2 / imageSize) * cu * cv * sum);
+            }
+          }
+          return coefficients;
+        }
+
+        try {
+          const image = await loadImage(src);
+          const canvas = document.createElement("canvas");
+          canvas.width = size;
+          canvas.height = size;
+          const context = canvas.getContext("2d", { willReadFrequently: true });
+          if (!context) {
+            return undefined;
+          }
+
+          context.drawImage(image, 0, 0, size, size);
+          const pixels = context.getImageData(0, 0, size, size).data;
+          const luminance: number[] = [];
+          let r = 0;
+          let g = 0;
+          let b = 0;
+          const pixelCount = size * size;
+
+          for (let index = 0; index < pixels.length; index += 4) {
+            const pr = pixels[index];
+            const pg = pixels[index + 1];
+            const pb = pixels[index + 2];
+            r += pr;
+            g += pg;
+            b += pb;
+            luminance.push(0.299 * pr + 0.587 * pg + 0.114 * pb);
+          }
+
+          const dct = lowFrequencyDct(luminance, size, hashSize);
+          const withoutDc = dct.slice(1);
+          const median = [...withoutDc].sort((left, right) => left - right)[Math.floor(withoutDc.length / 2)];
+          return {
+            hash: withoutDc.map((value) => (value >= median ? 1 : 0)),
+            avg: [r / pixelCount, g / pixelCount, b / pixelCount] as [number, number, number]
+          };
+        } catch {
+          return undefined;
+        }
+      },
+      { src: dataUrl, size: FEATURE_SIZE, hashSize: HASH_SIZE, decodeTimeoutMs: this.timeoutMs }
+    );
+  }
+}
+
+export function createArtworkComparator(options: ArtworkComparatorOptions = {}): ArtworkComparator {
+  return new JobArtworkComparator(options.timeoutMs ?? DEFAULT_TIMEOUT_MS);
+}
+
 /**
- * Pick a candidate by album-cover similarity, but only when the cover result is
- * decisive. This is a best-effort tie-breaker: any image/network failure
- * returns undefined so the caller can keep its existing ambiguous result.
+ * Compatibility wrapper for callers comparing only one track. Matching jobs
+ * use a shared comparator directly so downloads and browser resources are
+ * reused.
  */
 export async function chooseByCoverSimilarity(
   track: NormalizedTrack,
   candidates: AppleCandidate[]
 ): Promise<CandidateSimilarity | undefined> {
-  if (!track.albumCoverUrl || candidates.length < 2) {
-    return undefined;
-  }
-
-  const comparable = candidates.filter((c) => c.artworkUrl);
-  if (comparable.length < 2) {
-    return undefined;
-  }
-
+  const comparator = createArtworkComparator();
   try {
-    const urls = [track.albumCoverUrl, ...comparable.map((c) => c.artworkUrl as string)];
-    const dataUrls = await Promise.all(urls.map(loadImageDataUrl));
-    if (dataUrls.some((url) => !url)) {
-      return undefined;
-    }
-
-    const features = await extractFeatures(dataUrls as string[]);
-    const source = features[0];
-    if (!source) {
-      return undefined;
-    }
-
-    const scored = comparable
-      .map((candidate, index) => {
-        const feature = features[index + 1];
-        const comparison = feature ? compareFeatures(source, feature) : undefined;
-        return feature
-          ? {
-              candidate,
-              similarity: comparison?.similarity ?? 0,
-              colorSimilarity: comparison?.colorSimilarity ?? 0
-            }
-          : undefined;
-      })
-      .filter((item): item is CandidateSimilarity & { colorSimilarity: number } => item !== undefined)
-      .sort((a, b) => b.similarity - a.similarity);
-
-    const best = scored[0];
-    const second = scored[1];
-    if (!best || !second) {
-      return undefined;
-    }
-    if (best.similarity < MIN_SIMILARITY) {
-      return undefined;
-    }
-    if (best.similarity - second.similarity < MIN_SIMILARITY_MARGIN) {
-      return undefined;
-    }
-    if (best.colorSimilarity - second.colorSimilarity < MIN_SIMILARITY_MARGIN) {
-      return undefined;
-    }
-
-    return best;
-  } catch {
-    return undefined;
+    return await comparator.choose(track, candidates);
+  } finally {
+    await comparator.close();
   }
 }
 
-async function loadImageDataUrl(url: string): Promise<string | undefined> {
+async function loadImageDataUrl(url: string, timeoutMs: number): Promise<string | undefined> {
   if (url.startsWith("data:")) {
     return url;
   }
 
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const res = await fetch(url, {
       signal: controller.signal,
@@ -126,97 +295,6 @@ async function loadImageDataUrl(url: string): Promise<string | undefined> {
     return undefined;
   } finally {
     clearTimeout(timer);
-  }
-}
-
-async function extractFeatures(dataUrls: string[]): Promise<(ArtworkFeature | undefined)[]> {
-  const svgFeatures = dataUrls.map(featureFromSvgDataUrl);
-  if (svgFeatures.every((feature) => feature !== undefined)) {
-    return svgFeatures;
-  }
-
-  const browser = await chromium.launch({ headless: true });
-  const page = await browser.newPage();
-  try {
-    return await page.evaluate(
-      async ({ urls, size }) => {
-        function loadImage(src: string): Promise<HTMLImageElement> {
-          return new Promise((resolve, reject) => {
-            const img = new Image();
-            img.onload = () => resolve(img);
-            img.onerror = () => reject(new Error("image decode failed"));
-            img.src = src;
-          });
-        }
-
-        async function featureFor(src: string) {
-          try {
-            const img = await loadImage(src);
-            const canvas = document.createElement("canvas");
-            canvas.width = size;
-            canvas.height = size;
-            const ctx = canvas.getContext("2d", { willReadFrequently: true });
-            if (!ctx) return undefined;
-
-            ctx.drawImage(img, 0, 0, size, size);
-            const pixels = ctx.getImageData(0, 0, size, size).data;
-            const luminance: number[] = [];
-            let r = 0;
-            let g = 0;
-            let b = 0;
-            const pixelCount = size * size;
-
-            for (let i = 0; i < pixels.length; i += 4) {
-              const pr = pixels[i];
-              const pg = pixels[i + 1];
-              const pb = pixels[i + 2];
-              r += pr;
-              g += pg;
-              b += pb;
-              luminance.push(0.299 * pr + 0.587 * pg + 0.114 * pb);
-            }
-
-            const dct = lowFrequencyDct(luminance, size, 8);
-            const withoutDc = dct.slice(1);
-            const median = [...withoutDc].sort((a, b) => a - b)[Math.floor(withoutDc.length / 2)];
-
-            return {
-              hash: withoutDc.map((value) => (value >= median ? 1 : 0)),
-              avg: [r / pixelCount, g / pixelCount, b / pixelCount] as [number, number, number]
-            };
-          } catch {
-            return undefined;
-          }
-        }
-
-        function lowFrequencyDct(values: number[], size: number, hashSize: number) {
-          const coefficients: number[] = [];
-          for (let v = 0; v < hashSize; v += 1) {
-            for (let u = 0; u < hashSize; u += 1) {
-              let sum = 0;
-              for (let y = 0; y < size; y += 1) {
-                for (let x = 0; x < size; x += 1) {
-                  sum +=
-                    values[y * size + x] *
-                    Math.cos(((2 * x + 1) * u * Math.PI) / (2 * size)) *
-                    Math.cos(((2 * y + 1) * v * Math.PI) / (2 * size));
-                }
-              }
-              const cu = u === 0 ? 1 / Math.sqrt(2) : 1;
-              const cv = v === 0 ? 1 / Math.sqrt(2) : 1;
-              coefficients.push((2 / size) * cu * cv * sum);
-            }
-          }
-          return coefficients;
-        }
-
-        return Promise.all(urls.map(featureFor));
-      },
-      { urls: dataUrls, size: FEATURE_SIZE }
-    );
-  } finally {
-    await page.close();
-    await browser.close();
   }
 }
 

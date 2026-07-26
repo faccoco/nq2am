@@ -93,6 +93,15 @@ export type MatchPreferences = {
   storefront: string;
   nativeSearch: boolean;
   cjkDetection: "source" | "text";
+  matchConcurrency: number;
+  appleRequestIntervalMs: number;
+  appleRequestTimeoutMs: number;
+  appleMaxAttempts: number;
+  appleRetryBaseDelayMs: number;
+  appleRandomPauseEnabled: boolean;
+  appleRandomPauseMinMs: number;
+  appleRandomPauseMaxMs: number;
+  artworkTimeoutMs: number;
 };
 
 export type AuthStatus = {
