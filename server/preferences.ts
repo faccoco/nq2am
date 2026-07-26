@@ -7,29 +7,97 @@ const STORE_PATH = join(getDataDir(), "preferences.json");
 
 let cached: MatchPreferences | undefined;
 
-function clamp(n: number, min: number, max: number, fallback: number): number {
-  return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : fallback;
+export class PreferencesValidationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "PreferencesValidationError";
+  }
 }
 
-/** Coerce arbitrary input into a valid MatchPreferences (clamped + defaulted). */
-function sanitize(input: unknown): MatchPreferences {
-  const p = (input ?? {}) as Partial<MatchPreferences>;
+function readNumber(
+  input: Partial<MatchPreferences>,
+  key: keyof MatchPreferences,
+  fallback: number,
+  min: number,
+  max: number,
+  integer = false
+): number {
+  const value = input[key];
+  if (value === undefined) {
+    return fallback;
+  }
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new PreferencesValidationError(`${key} must be a finite number`);
+  }
+  if (value < min || value > max) {
+    throw new PreferencesValidationError(`${key} must be between ${min} and ${max}`);
+  }
+  if (integer && !Number.isInteger(value)) {
+    throw new PreferencesValidationError(`${key} must be an integer`);
+  }
+  return value;
+}
+
+function readBoolean(input: Partial<MatchPreferences>, key: keyof MatchPreferences, fallback: boolean): boolean {
+  const value = input[key];
+  if (value === undefined) {
+    return fallback;
+  }
+  if (typeof value !== "boolean") {
+    throw new PreferencesValidationError(`${key} must be a boolean`);
+  }
+  return value;
+}
+
+function validate(input: unknown): MatchPreferences {
+  if (typeof input !== "object" || input === null || Array.isArray(input)) {
+    throw new PreferencesValidationError("Preferences must be an object");
+  }
+
+  const p = input as Partial<MatchPreferences>;
   const d = DEFAULT_MATCH_PREFERENCES;
-  const explicit =
-    p.explicitPreference === "explicit" || p.explicitPreference === "clean" || p.explicitPreference === "none"
-      ? p.explicitPreference
-      : d.explicitPreference;
-  const cjk = p.cjkDetection === "source" || p.cjkDetection === "text" ? p.cjkDetection : d.cjkDetection;
+  const knownKeys = new Set(Object.keys(d));
+  for (const key of Object.keys(p)) {
+    if (!knownKeys.has(key)) {
+      throw new PreferencesValidationError(`Unknown preference: ${key}`);
+    }
+  }
+  const explicit = p.explicitPreference ?? d.explicitPreference;
+  if (explicit !== "explicit" && explicit !== "clean" && explicit !== "none") {
+    throw new PreferencesValidationError("explicitPreference must be explicit, clean, or none");
+  }
+  const cjk = p.cjkDetection ?? d.cjkDetection;
+  if (cjk !== "source" && cjk !== "text") {
+    throw new PreferencesValidationError("cjkDetection must be source or text");
+  }
+  if (p.storefront !== undefined && typeof p.storefront !== "string") {
+    throw new PreferencesValidationError("storefront must be a string");
+  }
+
+  const randomPauseMinMs = readNumber(p, "appleRandomPauseMinMs", d.appleRandomPauseMinMs, 0, 60_000, true);
+  const randomPauseMaxMs = readNumber(p, "appleRandomPauseMaxMs", d.appleRandomPauseMaxMs, 0, 60_000, true);
+  if (randomPauseMinMs > randomPauseMaxMs) {
+    throw new PreferencesValidationError("appleRandomPauseMinMs must be less than or equal to appleRandomPauseMaxMs");
+  }
+
   return {
-    threshold: clamp(Number(p.threshold), 0, 1, d.threshold),
-    ambiguousGap: clamp(Number(p.ambiguousGap), 0, 1, d.ambiguousGap),
-    preferDurationMatch: typeof p.preferDurationMatch === "boolean" ? p.preferDurationMatch : d.preferDurationMatch,
+    threshold: readNumber(p, "threshold", d.threshold, 0, 1),
+    ambiguousGap: readNumber(p, "ambiguousGap", d.ambiguousGap, 0, 1),
+    preferDurationMatch: readBoolean(p, "preferDurationMatch", d.preferDurationMatch),
     explicitPreference: explicit,
-    preferOriginalVersion:
-      typeof p.preferOriginalVersion === "boolean" ? p.preferOriginalVersion : d.preferOriginalVersion,
-    storefront: typeof p.storefront === "string" ? p.storefront.trim().toLowerCase() : d.storefront,
-    nativeSearch: typeof p.nativeSearch === "boolean" ? p.nativeSearch : d.nativeSearch,
-    cjkDetection: cjk
+    preferOriginalVersion: readBoolean(p, "preferOriginalVersion", d.preferOriginalVersion),
+    storefront: (p.storefront ?? d.storefront).trim().toLowerCase(),
+    nativeSearch: readBoolean(p, "nativeSearch", d.nativeSearch),
+    cjkDetection: cjk,
+    matchConcurrency: readNumber(p, "matchConcurrency", d.matchConcurrency, 1, 10, true),
+    appleRequestIntervalMs: readNumber(p, "appleRequestIntervalMs", d.appleRequestIntervalMs, 0, 10_000, true),
+    appleRequestTimeoutMs: readNumber(p, "appleRequestTimeoutMs", d.appleRequestTimeoutMs, 1_000, 120_000, true),
+    appleMaxAttempts: readNumber(p, "appleMaxAttempts", d.appleMaxAttempts, 1, 10, true),
+    appleRetryBaseDelayMs: readNumber(p, "appleRetryBaseDelayMs", d.appleRetryBaseDelayMs, 0, 60_000, true),
+    appleRandomPauseEnabled: readBoolean(p, "appleRandomPauseEnabled", d.appleRandomPauseEnabled),
+    appleRandomPauseMinMs: randomPauseMinMs,
+    appleRandomPauseMaxMs: randomPauseMaxMs,
+    artworkTimeoutMs: readNumber(p, "artworkTimeoutMs", d.artworkTimeoutMs, 1_000, 120_000, true)
   };
 }
 
@@ -37,7 +105,7 @@ export async function getPreferences(): Promise<MatchPreferences> {
   if (cached) return cached;
   try {
     const raw = await readFile(STORE_PATH, "utf8");
-    cached = sanitize(JSON.parse(raw));
+    cached = validate(JSON.parse(raw));
   } catch {
     cached = { ...DEFAULT_MATCH_PREFERENCES };
   }
@@ -45,13 +113,9 @@ export async function getPreferences(): Promise<MatchPreferences> {
 }
 
 export async function setPreferences(input: unknown): Promise<MatchPreferences> {
-  const next = sanitize(input);
+  const next = validate(input);
+  await mkdir(getDataDir(), { recursive: true });
+  await writeFile(STORE_PATH, JSON.stringify(next, null, 2), "utf8");
   cached = next;
-  try {
-    await mkdir(getDataDir(), { recursive: true });
-    await writeFile(STORE_PATH, JSON.stringify(next, null, 2), "utf8");
-  } catch {
-    // Best-effort persistence; in-memory value remains authoritative.
-  }
   return next;
 }

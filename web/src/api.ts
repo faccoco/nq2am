@@ -3,6 +3,7 @@ import type {
   AuthStatus,
   MatchJob,
   MatchPreferences,
+  MatchRetryScope,
   MusicProvider,
   NormalizedPlaylist,
   NormalizedTrack,
@@ -126,6 +127,27 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ playlistId }),
     });
+  },
+
+  async retryNotFound(playlistId: string): Promise<{ status: string; retried?: number }> {
+    return request<{ status: string; retried?: number }>(
+      `/api/match-apple/${encodeURIComponent(playlistId)}/retry-not-found`,
+      { method: "POST" },
+    );
+  },
+
+  async retryMatch(
+    playlistId: string,
+    scope: MatchRetryScope,
+    indices: number[] = [],
+  ): Promise<{ status: string; retried?: number }> {
+    return request<{ status: string; retried?: number }>(
+      `/api/match-apple/${encodeURIComponent(playlistId)}/retry`,
+      {
+        method: "POST",
+        body: JSON.stringify({ scope, indices }),
+      },
+    );
   },
 
   async getMatchJob(playlistId: string): Promise<MatchJob> {

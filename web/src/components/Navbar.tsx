@@ -73,7 +73,7 @@ export default function Navbar() {
 function StatusDot({ label, connected }: { label: string; connected: boolean }) {
   const { t } = useTranslation();
   return (
-    <div className="flex items-center gap-1.5 text-xs text-slate-300">
+    <div className="hidden items-center gap-1.5 text-xs text-slate-300 lg:flex">
       <span
         className={`inline-block h-2 w-2 rounded-full ${
           connected ? "bg-green-400" : "bg-slate-500"

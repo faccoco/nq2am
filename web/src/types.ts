@@ -28,6 +28,24 @@ export type AppleMatchStatus =
 
 export type AppleContentRating = "explicit" | "clean";
 
+export type AppleScoreBreakdown = {
+  total: number;
+  fields: {
+    title: number;
+    artist: number;
+    album: number;
+    duration: number;
+    version: number;
+  };
+  weights: {
+    title: number;
+    artist: number;
+    album: number;
+    duration: number;
+    version: number;
+  };
+};
+
 export type AppleCandidate = {
   id: string;
   name: string;
@@ -39,6 +57,7 @@ export type AppleCandidate = {
   releaseDate?: string;
   contentRating?: AppleContentRating;
   score: number;
+  scoreBreakdown?: AppleScoreBreakdown;
   isrc?: string;
   addableId?: string;
   storefront?: string;
@@ -62,6 +81,9 @@ export type AppleMatchReport = {
   results: AppleMatchResult[];
 };
 
+export type MatchRetryScope = "not_found" | "ambiguous" | "selected" | "all";
+export type MatchReviewTab = "all" | "ambiguous" | "not_found" | "matched";
+
 export type MatchPreferences = {
   threshold: number;
   ambiguousGap: number;
@@ -71,6 +93,15 @@ export type MatchPreferences = {
   storefront: string;
   nativeSearch: boolean;
   cjkDetection: "source" | "text";
+  matchConcurrency: number;
+  appleRequestIntervalMs: number;
+  appleRequestTimeoutMs: number;
+  appleMaxAttempts: number;
+  appleRetryBaseDelayMs: number;
+  appleRandomPauseEnabled: boolean;
+  appleRandomPauseMinMs: number;
+  appleRandomPauseMaxMs: number;
+  artworkTimeoutMs: number;
 };
 
 export type AuthStatus = {
