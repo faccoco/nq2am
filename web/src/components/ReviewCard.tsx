@@ -15,25 +15,53 @@ type Props = {
   result: AppleMatchResult;
   provider: MusicProvider;
   busy: boolean;
+  collapsed?: boolean;
+  retrySelected?: boolean;
+  onToggleCollapsed?: () => void;
+  onToggleRetrySelected?: () => void;
   onChoose: (appleMusicId: string | null) => void;
 };
 
 /**
  * A track's original metadata plus its Apple Music candidate list, where the
  * user can pick (or re-pick) which version is selected. Used in both the
- * "Needs review" and "Matched" tabs — matched tracks keep their full candidate
+ * "Ambiguous" and "Matched" tabs — matched tracks keep their full candidate
  * list so the choice can always be changed.
  */
-export default function ReviewCard({ result: r, provider, busy, onChoose }: Props) {
+export default function ReviewCard({
+  result: r,
+  provider,
+  busy,
+  collapsed = false,
+  retrySelected = false,
+  onToggleCollapsed,
+  onToggleRetrySelected,
+  onChoose,
+}: Props) {
   const { t } = useTranslation("match");
   const artistLine = r.track.artists.join(", ");
   // True when any candidate was fetched from a non-account (native) region and
   // bridged via ISRC — the library will display it using the account region.
   const bridged = (r.candidates ?? []).some((c) => c.addableId && c.addableId !== c.id);
+  const selectedCandidate = (r.candidates ?? []).find((c) => c.id === r.selectedId);
+  const selectedLabel = selectedCandidate
+    ? [selectedCandidate.name, selectedCandidate.albumName].filter(Boolean).join(" · ")
+    : "";
 
   return (
     <div className="rounded-lg border border-slate-700 bg-slate-800/50 p-4">
       <div className="mb-3 flex items-start gap-3 pr-3">
+        {onToggleRetrySelected && (
+          <input
+            type="checkbox"
+            checked={retrySelected}
+            onChange={onToggleRetrySelected}
+            className="mt-8 h-4 w-4 flex-shrink-0 accent-indigo-500"
+            aria-label={t("retry.selectTrack", {
+              name: r.track.originalName,
+            })}
+          />
+        )}
         {r.track.albumCoverUrl ? (
           <img
             src={r.track.albumCoverUrl}
@@ -115,21 +143,44 @@ export default function ReviewCard({ result: r, provider, busy, onChoose }: Prop
             : t("noMatch")}
         </button>
       </div>
-      <div className="space-y-2">
-        {bridged && (
-          <p className="text-xs text-slate-500">{t("nativeNotice")}</p>
-        )}
-        {(r.candidates ?? []).map((c) => (
-          <CandidateCard
-            key={c.id}
-            candidate={c}
-            sourceDurationMs={r.track.durationMs}
-            selected={r.selectedId === c.id}
-            busy={busy}
-            onChoose={() => onChoose(c.id)}
-          />
-        ))}
-      </div>
+      {collapsed ? (
+        <div className="flex items-center justify-between gap-3 rounded-md border border-slate-700 bg-slate-900/40 px-3 py-2">
+          <div className="min-w-0 text-sm text-slate-300">
+            {selectedCandidate ? (
+              <span className="block truncate">
+                {t("reviewOptions.selected", { name: selectedLabel })}
+              </span>
+            ) : (
+              <span>{t("reviewOptions.noMatch")}</span>
+            )}
+          </div>
+          {onToggleCollapsed && (
+            <button
+              type="button"
+              onClick={onToggleCollapsed}
+              className="flex-shrink-0 rounded-md border border-slate-600 px-2.5 py-1 text-xs font-medium text-slate-200 hover:bg-slate-700"
+            >
+              {t("reviewOptions.show")}
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {bridged && (
+            <p className="text-xs text-slate-500">{t("nativeNotice")}</p>
+          )}
+          {(r.candidates ?? []).map((c) => (
+            <CandidateCard
+              key={c.id}
+              candidate={c}
+              sourceDurationMs={r.track.durationMs}
+              selected={r.selectedId === c.id}
+              busy={busy}
+              onChoose={() => onChoose(c.id)}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

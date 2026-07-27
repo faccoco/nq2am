@@ -1,6 +1,7 @@
 import { Router, type Router as RouterType } from "express";
-import { createAppleMusicPlaylist } from "../../src/apple/matcher.js";
-import { getMatchReport, getPlaylist, setApplePlaylistId, setTaskStatus } from "../state.js";
+import { createAppleMusicPlaylistFromReport } from "../../src/apple/matcher.js";
+import { getPreferences } from "../preferences.js";
+import { getMatchReport, getPlaylist, setApplePlaylistId, setMatchReport, setTaskStatus } from "../state.js";
 
 const router: RouterType = Router();
 
@@ -22,29 +23,20 @@ router.post("/create-playlist", async (req, res) => {
     return;
   }
 
-  // For each matched track, prefer the account-store "addable" id (resolved via
-  // ISRC when the candidate came from a native store), falling back to the
-  // selected/candidate id.
-  const trackIds = report.results
-    .filter((r) => r.status === "matched")
-    .map((r) => {
-      const selected = r.candidates?.find((c) => c.id === r.selectedId);
-      return selected?.addableId ?? r.appleMusicId;
-    })
-    .filter((id): id is string => Boolean(id));
-
-  if (trackIds.length === 0) {
+  const matchedCount = report.results.filter((result) => result.status === "matched").length;
+  if (matchedCount === 0) {
     res.status(400).json({ error: "No matched tracks to add to playlist" });
     return;
   }
 
   const playlistName = name ?? playlist?.name ?? "Imported Playlist";
-  const playlistDescription =
-    description ?? `Imported from ${playlist?.provider ?? "nq2am"} - ${trackIds.length} tracks`;
+  const playlistDescription = description ?? `Imported from ${playlist?.provider ?? "nq2am"} - ${matchedCount} tracks`;
 
   setTaskStatus(playlistId, "creating");
   try {
-    const newPlaylistId = await createAppleMusicPlaylist(playlistName, playlistDescription, trackIds);
+    const prefs = await getPreferences();
+    const newPlaylistId = await createAppleMusicPlaylistFromReport(report, prefs, playlistName, playlistDescription);
+    setMatchReport(playlistId, report);
     setApplePlaylistId(playlistId, newPlaylistId);
     res.json({ playlistId: newPlaylistId });
   } catch (error) {
