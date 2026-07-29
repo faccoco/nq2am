@@ -716,6 +716,67 @@ test("Apple Music retry can refresh selected result indices once", async () => {
   assert.equal(report.results[2].status, "not_implemented");
 });
 
+test("Apple Music retry replaces request failures with fresh semantic results", async () => {
+  const { retryAppleMusicResults } = await loadMatcherModule();
+  const tracks = ["Matched", "Ambiguous", "Missing", "Failed"].map(
+    (originalName): NormalizedTrack => ({
+      originalName,
+      artists: ["Artist"],
+      durationMs: 180_000,
+      source: { provider: "qq", raw: {} }
+    })
+  );
+  const report = await retryAppleMusicResults(
+    {
+      provider: "qq",
+      playlistId: "retry-request-failed",
+      results: tracks.map((retryTrack) => ({
+        track: retryTrack,
+        status: "request_failed" as const,
+        candidates: [],
+        reason: "Previous request failed",
+        requestFailure: { kind: "network" as const, operation: "search" as const }
+      }))
+    },
+    [0, 1, 2, 3],
+    { ...DEFAULT_MATCH_PREFERENCES, storefront: "us", nativeSearch: false, matchConcurrency: 1 },
+    undefined,
+    {
+      logger: () => {},
+      sessionFactory: async () => ({
+        search: async (term) => {
+          if (term.startsWith("Matched")) {
+            return [appleSongWith("matched", { name: "Matched", artistName: "Artist", durationMs: 180_000 })];
+          }
+          if (term.startsWith("Ambiguous")) {
+            return [
+              appleSongWith("ambiguous-one", { name: "Ambiguous", artistName: "Artist", durationMs: 180_000 }),
+              appleSongWith("ambiguous-two", { name: "Ambiguous", artistName: "Artist", durationMs: 180_000 })
+            ];
+          }
+          if (term.startsWith("Failed")) {
+            throw new Error("fetch failed");
+          }
+          return [];
+        },
+        songsByIsrc: async () => [],
+        getStorefront: async () => "us",
+        createPlaylist: async () => "playlist",
+        getStats: () => ({ requestCount: 4, retryCount: 0 }),
+        close: async () => {}
+      })
+    }
+  );
+
+  assert.deepEqual(
+    report.results.map((result) => result.status),
+    ["matched", "ambiguous", "not_found", "request_failed"]
+  );
+  assert.equal(report.results[0].requestFailure, undefined);
+  assert.equal(report.results[2].reason, "No results from Apple Music search");
+  assert.deepEqual(report.results[3].requestFailure, { kind: "network", operation: "search" });
+});
+
 test("Apple Music report refresh upgrades stale ambiguous candidates", async () => {
   const { refreshAppleMatchReportCandidates } = await loadMatcherModule();
   const report = await refreshAppleMatchReportCandidates(

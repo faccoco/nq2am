@@ -35,6 +35,8 @@ export type {
   AppleMatchReport,
   AppleMatchResult,
   AppleMatchStatus,
+  AppleRequestFailure,
+  AppleRequestOperation,
   FetchOptions,
   MatchPreferences,
   MusicProvider,

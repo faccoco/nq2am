@@ -8,6 +8,7 @@ const STATUS_STYLE: Record<AppleMatchStatus, string> = {
   matched: "bg-green-600/20 text-green-300 ring-green-500/40",
   not_found: "bg-red-600/20 text-red-300 ring-red-500/40",
   ambiguous: "bg-yellow-600/20 text-yellow-200 ring-yellow-500/40",
+  request_failed: "bg-orange-600/20 text-orange-200 ring-orange-500/40",
   not_implemented: "bg-slate-600/30 text-slate-300 ring-slate-500/40",
 };
 
@@ -78,7 +79,7 @@ export default function ReviewCard({
             </span>
             <ProviderBadge provider={provider} />
             <span
-              className={`ml-auto inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${STATUS_STYLE[r.status]}`}
+              className={`ml-auto inline-flex items-center whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${STATUS_STYLE[r.status]}`}
             >
               {t(`status.${r.status}`)}
             </span>

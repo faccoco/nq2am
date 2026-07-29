@@ -29,9 +29,18 @@ export type NormalizedPlaylist = {
   raw: unknown;
 };
 
-export type AppleMatchStatus = "not_implemented" | "matched" | "not_found" | "ambiguous";
+export type AppleMatchStatus = "not_implemented" | "matched" | "not_found" | "ambiguous" | "request_failed";
 
 export type AppleContentRating = "explicit" | "clean";
+
+export type AppleRequestOperation = "session" | "storefront" | "search" | "isrc" | "create_playlist";
+
+export type AppleRequestFailure = {
+  kind: "timeout" | "rate_limited" | "http" | "network" | "session" | "unknown";
+  operation?: AppleRequestOperation;
+  status?: number;
+  attempts?: number;
+};
 
 export type AppleScoreBreakdown = {
   total: number;
@@ -88,6 +97,7 @@ export type AppleMatchResult = {
   appleMusicId?: string;
   appleMusicUrl?: string;
   reason?: string;
+  requestFailure?: AppleRequestFailure;
 };
 
 export type AppleMatchReport = {
@@ -159,7 +169,7 @@ export const DEFAULT_MATCH_PREFERENCES: MatchPreferences = {
   appleRequestTimeoutMs: 15_000,
   appleMaxAttempts: 3,
   appleRetryBaseDelayMs: 750,
-  appleRandomPauseEnabled: false,
+  appleRandomPauseEnabled: true,
   appleRandomPauseMinMs: 250,
   appleRandomPauseMaxMs: 750,
   artworkTimeoutMs: 8_000

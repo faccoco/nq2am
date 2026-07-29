@@ -1,6 +1,8 @@
 import { performance } from "node:perf_hooks";
 import { type APIRequestContext, type Browser, type BrowserContext, type Cookie, chromium, request } from "playwright";
 import { loadCookies, saveCookies } from "../fetchers/auth.js";
+import type { AppleRequestOperation } from "../types.js";
+import { wrapAppleRequestFailure } from "./requestFailure.js";
 import { RequestStartScheduler, runWithRetry } from "./requestScheduler.js";
 
 export type AppleSong = {
@@ -39,7 +41,7 @@ type PlaylistResponse = {
   data: { id: string }[];
 };
 
-export type AppleApiOperation = "storefront" | "search" | "isrc" | "create_playlist";
+export type AppleApiOperation = Exclude<AppleRequestOperation, "session">;
 
 export type AppleApiRequestMetric = {
   operation: AppleApiOperation;
@@ -424,94 +426,101 @@ export class PlaywrightAppleApiSession implements AppleApiSession {
       throw new Error("Apple Music API session is closed");
     }
     this.activeRequestCount += 1;
+    let attempts = 0;
 
     try {
-      return await runWithRetry(
-        async (attempt) => {
-          if (attempt > 1) {
-            this.retryCount += 1;
-          }
-          this.requestCount += 1;
+      try {
+        return await runWithRetry(
+          async (attempt) => {
+            attempts = attempt;
+            if (attempt > 1) {
+              this.retryCount += 1;
+            }
+            this.requestCount += 1;
 
-          const startedAt = performance.now();
-          let status: number | undefined;
-          const requestContext = this.requestContext;
-          try {
-            const value = await this.scheduler.schedule(async () => {
-              const response = await requestContext.fetch(path, {
-                method: init?.method ?? "GET",
-                headers: {
-                  Accept: "application/json",
-                  Authorization: `Bearer ${this.developerToken}`,
-                  "Content-Type": "application/json",
-                  "Music-User-Token": this.mediaUserToken,
-                  Origin: "https://music.apple.com",
-                  Referer: "https://music.apple.com/"
-                },
-                ...(init?.body === undefined ? {} : { data: init.body }),
-                failOnStatusCode: false,
-                timeout: this.requestTimeoutMs
+            const startedAt = performance.now();
+            let status: number | undefined;
+            const requestContext = this.requestContext;
+            try {
+              const value = await this.scheduler.schedule(async () => {
+                const response = await requestContext.fetch(path, {
+                  method: init?.method ?? "GET",
+                  headers: {
+                    Accept: "application/json",
+                    Authorization: `Bearer ${this.developerToken}`,
+                    "Content-Type": "application/json",
+                    "Music-User-Token": this.mediaUserToken,
+                    Origin: "https://music.apple.com",
+                    Referer: "https://music.apple.com/"
+                  },
+                  ...(init?.body === undefined ? {} : { data: init.body }),
+                  failOnStatusCode: false,
+                  timeout: this.requestTimeoutMs
+                });
+
+                try {
+                  status = response.status();
+                  const text = await response.text();
+                  if (!response.ok()) {
+                    const retryAfterMs = parseRetryAfter(response.headers()["retry-after"]);
+                    throw new AppleApiError(status, `Apple Music API ${status}: ${text.slice(0, 200)}`, retryAfterMs);
+                  }
+                  return JSON.parse(text) as T;
+                } finally {
+                  await response.dispose().catch(() => {});
+                }
               });
 
-              try {
-                status = response.status();
-                const text = await response.text();
-                if (!response.ok()) {
-                  const retryAfterMs = parseRetryAfter(response.headers()["retry-after"]);
-                  throw new AppleApiError(status, `Apple Music API ${status}: ${text.slice(0, 200)}`, retryAfterMs);
-                }
-                return JSON.parse(text) as T;
-              } finally {
-                await response.dispose().catch(() => {});
+              this.onRequest?.({
+                operation,
+                attempt,
+                durationMs: performance.now() - startedAt,
+                outcome: "success",
+                status
+              });
+              return value;
+            } catch (error) {
+              status = error instanceof AppleApiError ? error.status : status;
+              this.onRequest?.({
+                operation,
+                attempt,
+                durationMs: performance.now() - startedAt,
+                outcome: "error",
+                status
+              });
+              if (isTargetClosedError(error)) {
+                throw new AppleRequestContextClosedError(requestContext, error);
               }
-            });
-
-            this.onRequest?.({
-              operation,
-              attempt,
-              durationMs: performance.now() - startedAt,
-              outcome: "success",
-              status
-            });
-            return value;
-          } catch (error) {
-            status = error instanceof AppleApiError ? error.status : status;
-            this.onRequest?.({
-              operation,
-              attempt,
-              durationMs: performance.now() - startedAt,
-              outcome: "error",
-              status
-            });
-            if (isTargetClosedError(error)) {
-              throw new AppleRequestContextClosedError(requestContext, error);
+              throw error;
             }
-            throw error;
+          },
+          {
+            maxAttempts: this.maxAttempts,
+            shouldRetry: (error, attempt) => isRetryable(error, attempt, operation),
+            beforeRetry: async (error, attempt) => {
+              if (error instanceof AppleRequestContextClosedError) {
+                await this.recoverRequestContext(error.requestContext);
+                return;
+              }
+
+              if (error instanceof AppleApiError && error.status === 401) {
+                this.developerToken = await refreshDeveloperToken(
+                  await this.readCookies(this.requestContext),
+                  this.developerToken
+                );
+                return;
+              }
+
+              const retryAfterMs = error instanceof AppleApiError ? error.retryAfterMs : undefined;
+              const backoffMs = retryAfterMs ?? this.baseRetryDelayMs * 2 ** (attempt - 1);
+              this.scheduler.deferNextStart(backoffMs);
+            }
           }
-        },
-        {
-          maxAttempts: this.maxAttempts,
-          shouldRetry: (error, attempt) => isRetryable(error, attempt, operation),
-          beforeRetry: async (error, attempt) => {
-            if (error instanceof AppleRequestContextClosedError) {
-              await this.recoverRequestContext(error.requestContext);
-              return;
-            }
-
-            if (error instanceof AppleApiError && error.status === 401) {
-              this.developerToken = await refreshDeveloperToken(
-                await this.readCookies(this.requestContext),
-                this.developerToken
-              );
-              return;
-            }
-
-            const retryAfterMs = error instanceof AppleApiError ? error.retryAfterMs : undefined;
-            const backoffMs = retryAfterMs ?? this.baseRetryDelayMs * 2 ** (attempt - 1);
-            this.scheduler.deferNextStart(backoffMs);
-          }
-        }
-      );
+        );
+      } catch (error) {
+        const status = error instanceof AppleApiError ? error.status : undefined;
+        throw wrapAppleRequestFailure(error, { operation, status, attempts });
+      }
     } finally {
       this.activeRequestCount -= 1;
       if (this.activeRequestCount === 0) {

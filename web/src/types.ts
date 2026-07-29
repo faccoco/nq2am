@@ -24,7 +24,15 @@ export type AppleMatchStatus =
   | "not_implemented"
   | "matched"
   | "not_found"
-  | "ambiguous";
+  | "ambiguous"
+  | "request_failed";
+
+export type AppleRequestFailure = {
+  kind: "timeout" | "rate_limited" | "http" | "network" | "session" | "unknown";
+  operation?: "session" | "storefront" | "search" | "isrc" | "create_playlist";
+  status?: number;
+  attempts?: number;
+};
 
 export type AppleContentRating = "explicit" | "clean";
 
@@ -72,6 +80,7 @@ export type AppleMatchResult = {
   appleMusicId?: string;
   appleMusicUrl?: string;
   reason?: string;
+  requestFailure?: AppleRequestFailure;
 };
 
 export type AppleMatchReport = {
@@ -81,8 +90,8 @@ export type AppleMatchReport = {
   results: AppleMatchResult[];
 };
 
-export type MatchRetryScope = "not_found" | "ambiguous" | "selected" | "all";
-export type MatchReviewTab = "all" | "ambiguous" | "not_found" | "matched";
+export type MatchRetryScope = "not_found" | "ambiguous" | "request_failed" | "selected" | "all";
+export type MatchReviewTab = "all" | "ambiguous" | "not_found" | "request_failed" | "matched";
 
 export type MatchPreferences = {
   threshold: number;

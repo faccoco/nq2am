@@ -1,5 +1,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { normalizeLegacyAppleRequestFailures } from "../src/apple/requestFailure.js";
 import { getDataDir } from "../src/fetchers/auth.js";
 import type { AppleMatchReport, MusicProvider, NormalizedPlaylist, NormalizedTrack } from "../src/types.js";
 
@@ -53,6 +54,7 @@ async function ensureLoaded(): Promise<void> {
   try {
     const raw = await readFile(STORE_PATH, "utf8");
     const arr = JSON.parse(raw) as Task[];
+    let migrated = false;
     for (const t of arr) {
       // A match interrupted by a restart is no longer running — mark it failed
       // so the UI offers a clean retry rather than spinning forever.
@@ -63,7 +65,17 @@ async function ensureLoaded(): Promise<void> {
       if (t.status === "creating") {
         t.status = "match_failed";
       }
+      if (t.matchReport) {
+        const normalized = normalizeLegacyAppleRequestFailures(t.matchReport);
+        if (normalized !== t.matchReport) {
+          t.matchReport = normalized;
+          migrated = true;
+        }
+      }
       tasks.set(t.key, t);
+    }
+    if (migrated) {
+      persist();
     }
   } catch {
     // No store yet — start empty.
@@ -270,6 +282,7 @@ export function setTrackSelection(key: string, idx: number, appleMusicId: string
     result.appleMusicId = undefined;
     result.appleMusicUrl = undefined;
     result.reason = "Marked as no match";
+    delete result.requestFailure;
     task.updatedAt = Date.now();
     persist();
     return result;
@@ -284,6 +297,7 @@ export function setTrackSelection(key: string, idx: number, appleMusicId: string
   result.appleMusicId = candidate.id;
   result.appleMusicUrl = candidate.url;
   result.reason = undefined;
+  delete result.requestFailure;
   task.updatedAt = Date.now();
   persist();
   return result;

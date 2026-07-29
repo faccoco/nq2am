@@ -26,6 +26,7 @@ import {
   createArtworkComparator
 } from "./artwork.js";
 import { mapWithConcurrency } from "./concurrency.js";
+import { describeAppleRequestFailure } from "./requestFailure.js";
 import { albumSimilarity, compactAlbumText, compactText, scoreAppleSong } from "./scoring.js";
 
 /** Number of candidates kept per track so the user can override the pick. */
@@ -57,6 +58,21 @@ type CoverSimilarityChooser = (
   track: NormalizedTrack,
   candidates: AppleCandidate[]
 ) => Promise<CandidateSimilarity | undefined>;
+
+function requestFailedResult(
+  track: NormalizedTrack,
+  error: unknown,
+  operation: "session" | "search"
+): AppleMatchResult {
+  const { reason, requestFailure } = describeAppleRequestFailure(error, { operation });
+  return {
+    track,
+    status: "request_failed",
+    candidates: [],
+    reason,
+    requestFailure
+  };
+}
 
 function defaultMatchLogger(event: AppleMatchLogEvent): void {
   process.stderr.write(`[apple-match] ${JSON.stringify(event)}\n`);
@@ -539,6 +555,8 @@ async function processTrack(
     const artworkStartedAt = performance.now();
     try {
       return await artworkComparator.choose(sourceTrack, candidates);
+    } catch {
+      return undefined;
     } finally {
       logger({
         event: "stage",
@@ -652,10 +670,7 @@ export async function matchAppleMusic(
       playlistId: playlist.id,
       playlistName: playlist.name,
       results: playlist.tracks.map((track) => ({
-        track,
-        status: "not_found",
-        candidates: [],
-        reason: (error as Error).message
+        ...requestFailedResult(track, error, "session")
       }))
     };
   }
@@ -682,7 +697,7 @@ export async function matchAppleMusic(
           return await processTrack(track, trackIndex, accountStore, prefs, session, artworkComparator, logger, jobId);
         } catch (error) {
           outcome = "error";
-          return { track, status: "not_found", candidates: [], reason: (error as Error).message };
+          return requestFailedResult(track, error, "search");
         } finally {
           logger({
             event: "stage",

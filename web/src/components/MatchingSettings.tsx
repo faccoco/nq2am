@@ -17,7 +17,7 @@ const DEFAULTS: MatchPreferences = {
   appleRequestTimeoutMs: 15_000,
   appleMaxAttempts: 3,
   appleRetryBaseDelayMs: 750,
-  appleRandomPauseEnabled: false,
+  appleRandomPauseEnabled: true,
   appleRandomPauseMinMs: 250,
   appleRandomPauseMaxMs: 750,
   artworkTimeoutMs: 8_000,

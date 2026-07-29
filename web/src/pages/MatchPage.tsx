@@ -15,6 +15,7 @@ import { shouldShowGoTopButton } from "../../../src/scrollUi";
 import {
   getAmbiguousIndices,
   getNotFoundIndices,
+  getRequestFailedIndices,
   retryScopeForTab,
 } from "../../../src/matchFilters";
 import { useTasks } from "../tasks";
@@ -32,10 +33,12 @@ const STATUS_STYLE: Record<AppleMatchStatus, string> = {
   matched: "bg-green-600/20 text-green-300 ring-green-500/40",
   not_found: "bg-red-600/20 text-red-300 ring-red-500/40",
   ambiguous: "bg-yellow-600/20 text-yellow-200 ring-yellow-500/40",
+  request_failed: "bg-orange-600/20 text-orange-200 ring-orange-500/40",
   not_implemented: "bg-slate-600/30 text-slate-300 ring-slate-500/40",
 };
 
 const RETRY_SCOPES: MatchRetryScope[] = [
+  "request_failed",
   "not_found",
   "ambiguous",
   "selected",
@@ -152,6 +155,7 @@ export default function MatchPage() {
       matched: 0,
       not_found: 0,
       ambiguous: 0,
+      request_failed: 0,
       not_implemented: 0,
     };
     if (!report) return base;
@@ -203,7 +207,9 @@ export default function MatchPage() {
           ? "not_found"
           : retryScope === "ambiguous"
             ? "ambiguous"
-            : "all",
+            : retryScope === "request_failed"
+              ? "request_failed"
+              : "all",
       );
       setRetrySelectedIndices(new Set());
       setJob((prev) =>
@@ -281,8 +287,14 @@ export default function MatchPage() {
     return getNotFoundIndices(report.results);
   }, [report]);
 
+  const requestFailedIndices = useMemo(() => {
+    if (!report) return [];
+    return getRequestFailedIndices(report.results);
+  }, [report]);
+
   const retryCounts = useMemo(
     () => ({
+      request_failed: requestFailedIndices.length,
       not_found: notFoundIndices.length,
       ambiguous: ambiguousResultIndices.length,
       selected: retrySelectedIndices.size,
@@ -292,6 +304,7 @@ export default function MatchPage() {
       ambiguousResultIndices.length,
       notFoundIndices.length,
       report,
+      requestFailedIndices.length,
       retrySelectedIndices.size,
     ],
   );
@@ -487,7 +500,7 @@ export default function MatchPage() {
         )}
       </div>
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         <StatCard label={t("stats.total")} value={stats.total} tone="neutral" />
         <StatCard
           label={t("stats.matched")}
@@ -503,6 +516,11 @@ export default function MatchPage() {
           label={t("stats.ambiguous")}
           value={stats.ambiguous}
           tone="warning"
+        />
+        <StatCard
+          label={t("stats.request_failed")}
+          value={stats.request_failed}
+          tone="failure"
         />
         <StatCard
           label={t("stats.pending")}
@@ -521,6 +539,12 @@ export default function MatchPage() {
             onClick={() => setTab("ambiguous")}
           >
             {t("tabs.ambiguous", { count: ambiguousResultIndices.length })}
+          </TabButton>
+          <TabButton
+            active={tab === "request_failed"}
+            onClick={() => setTab("request_failed")}
+          >
+            {t("tabs.request_failed", { count: requestFailedIndices.length })}
           </TabButton>
           <TabButton
             active={tab === "not_found"}
@@ -562,6 +586,24 @@ export default function MatchPage() {
                 onChoose={(appleMusicId) =>
                   chooseCandidate(i, appleMusicId, { collapseReviewOptions: true })
                 }
+              />
+            ))}
+          </div>
+        )
+      ) : tab === "request_failed" ? (
+        requestFailedIndices.length === 0 ? (
+          <div className="rounded-lg border border-dashed border-slate-700 bg-slate-800/50 px-6 py-10 text-center text-slate-400">
+            {t("emptyRequestFailed")}
+          </div>
+        ) : (
+          <div className="space-y-5">
+            {requestFailedIndices.map((i) => (
+              <RequestFailedCard
+                key={i}
+                result={report.results[i]}
+                provider={report.provider}
+                retrySelected={retrySelectedIndices.has(i)}
+                onToggleRetrySelected={() => toggleRetrySelected(i)}
               />
             ))}
           </div>
@@ -618,13 +660,19 @@ export default function MatchPage() {
           <table className="w-full text-left">
             <thead className="bg-slate-800 text-xs uppercase tracking-wide text-slate-400">
               <tr>
-                <th className="w-10 px-3 py-2">{t("table.retry")}</th>
-                <th className="px-3 py-2 w-12">{t("table.index")}</th>
+                <th className="w-16 min-w-16 whitespace-nowrap px-3 py-2">
+                  {t("table.retry")}
+                </th>
+                <th className="w-12 whitespace-nowrap px-3 py-2">
+                  {t("table.index")}
+                </th>
                 <th className="px-3 py-2">{t("table.name")}</th>
                 <th className="px-3 py-2">{t("table.artists")}</th>
-                <th className="px-3 py-2">{t("table.status")}</th>
+                <th className="min-w-28 whitespace-nowrap px-3 py-2">
+                  {t("table.status")}
+                </th>
                 <th className="px-3 py-2">{t("table.appleIdReason")}</th>
-                <th className="px-3 py-2 w-24" />
+                <th className="w-28 min-w-28 px-3 py-2" />
               </tr>
             </thead>
             <tbody>
@@ -654,9 +702,9 @@ export default function MatchPage() {
                     <td className="px-3 py-2 text-sm text-slate-300">
                       {r.track.artists.join(", ")}
                     </td>
-                    <td className="px-3 py-2 text-sm">
+                    <td className="min-w-28 whitespace-nowrap px-3 py-2 text-sm">
                       <span
-                        className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${STATUS_STYLE[r.status]}`}
+                        className={`inline-flex items-center whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${STATUS_STYLE[r.status]}`}
                       >
                         {t(`status.${r.status}`)}
                       </span>
@@ -794,7 +842,7 @@ function NotFoundCard({
               {t("original.heading")}
             </span>
             <ProviderBadge provider={provider} />
-            <span className={`ml-auto inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${STATUS_STYLE.not_found}`}>
+            <span className={`ml-auto inline-flex items-center whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${STATUS_STYLE.not_found}`}>
               {t("status.not_found")}
             </span>
           </div>
@@ -809,6 +857,73 @@ function NotFoundCard({
           )}
           <div className="mt-2 text-xs text-slate-500">
             {r.reason ?? t("notFoundNoReason")}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RequestFailedCard({
+  result: r,
+  provider,
+  retrySelected = false,
+  onToggleRetrySelected,
+}: {
+  result: AppleMatchResult;
+  provider: MusicProvider;
+  retrySelected?: boolean;
+  onToggleRetrySelected?: () => void;
+}) {
+  const { t } = useTranslation("match");
+  const artistLine = r.track.artists.join(", ");
+
+  return (
+    <div className="rounded-lg border border-orange-500/30 bg-slate-800/50 p-4">
+      <div className="flex items-start gap-3">
+        {onToggleRetrySelected && (
+          <input
+            type="checkbox"
+            checked={retrySelected}
+            onChange={onToggleRetrySelected}
+            className="mt-6 h-4 w-4 flex-shrink-0 accent-indigo-500"
+            aria-label={t("retry.selectTrack", {
+              name: r.track.originalName,
+            })}
+          />
+        )}
+        {r.track.albumCoverUrl ? (
+          <img
+            src={r.track.albumCoverUrl}
+            alt=""
+            className="h-16 w-16 flex-shrink-0 rounded object-cover"
+          />
+        ) : (
+          <div className="h-16 w-16 flex-shrink-0 rounded bg-slate-700" />
+        )}
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+              {t("original.heading")}
+            </span>
+            <ProviderBadge provider={provider} />
+            <span
+              className={`ml-auto inline-flex items-center whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${STATUS_STYLE.request_failed}`}
+            >
+              {t("status.request_failed")}
+            </span>
+          </div>
+          <div className="mt-1 truncate text-base font-semibold text-white">
+            {r.track.originalName}
+          </div>
+          <div className="truncate text-sm text-slate-300">{artistLine}</div>
+          {r.track.albumName && (
+            <div className="truncate text-xs text-slate-500">
+              {r.track.albumName}
+            </div>
+          )}
+          <div className="mt-2 break-words text-xs text-orange-200/80">
+            {r.reason ?? t("requestFailedNoReason")}
           </div>
         </div>
       </div>
@@ -847,12 +962,13 @@ function StatCard({
 }: {
   label: string;
   value: number;
-  tone: "success" | "danger" | "warning" | "neutral";
+  tone: "success" | "danger" | "warning" | "failure" | "neutral";
 }) {
   const toneClasses: Record<typeof tone, string> = {
     success: "text-green-300",
     danger: "text-red-300",
     warning: "text-yellow-200",
+    failure: "text-orange-200",
     neutral: "text-slate-100",
   };
   return (

@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { getAmbiguousIndices, getNotFoundIndices, getRetryIndices, retryScopeForTab } from "../src/matchFilters.js";
+import {
+  getAmbiguousIndices,
+  getNotFoundIndices,
+  getRequestFailedIndices,
+  getRetryIndices,
+  retryScopeForTab
+} from "../src/matchFilters.js";
 
 const candidates = [{ id: "apple-1" }];
 
@@ -19,11 +25,23 @@ test("not-found list contains every not-found track", () => {
   const indices = getNotFoundIndices([
     { status: "matched" },
     { status: "not_found", candidates },
+    { status: "request_failed" },
     { status: "ambiguous" },
     { status: "not_found", candidates: [] }
   ]);
 
-  assert.deepEqual(indices, [1, 3]);
+  assert.deepEqual(indices, [1, 4]);
+});
+
+test("request-failed list excludes semantic not-found tracks", () => {
+  const indices = getRequestFailedIndices([
+    { status: "request_failed" },
+    { status: "not_found", candidates: [] },
+    { status: "request_failed" },
+    { status: "ambiguous" }
+  ]);
+
+  assert.deepEqual(indices, [0, 2]);
 });
 
 test("retry scopes select the expected result indices", () => {
@@ -31,18 +49,21 @@ test("retry scopes select the expected result indices", () => {
     { status: "matched" },
     { status: "ambiguous" },
     { status: "not_found", candidates },
+    { status: "request_failed" },
     { status: "not_implemented" }
   ] as const;
 
   assert.deepEqual(getRetryIndices(results, "not_found"), [2]);
   assert.deepEqual(getRetryIndices(results, "ambiguous"), [1]);
-  assert.deepEqual(getRetryIndices(results, "all"), [0, 1, 2, 3]);
-  assert.deepEqual(getRetryIndices(results, "selected", [2, 1, 2, 99, -1]), [2, 1]);
+  assert.deepEqual(getRetryIndices(results, "request_failed"), [3]);
+  assert.deepEqual(getRetryIndices(results, "all"), [0, 1, 2, 3, 4]);
+  assert.deepEqual(getRetryIndices(results, "selected", [3, 2, 3, 99, -1]), [3, 2]);
 });
 
 test("retry scope follows retryable review tabs", () => {
   assert.equal(retryScopeForTab("ambiguous", "not_found"), "ambiguous");
   assert.equal(retryScopeForTab("not_found", "ambiguous"), "not_found");
+  assert.equal(retryScopeForTab("request_failed", "not_found"), "request_failed");
   assert.equal(retryScopeForTab("all", "ambiguous"), "ambiguous");
   assert.equal(retryScopeForTab("matched", "selected"), "selected");
 });

@@ -16,7 +16,7 @@ const router: RouterType = Router();
 
 // Keys with an in-flight match, so a duplicate POST doesn't start a second run.
 const running = new Set<string>();
-const RETRY_SCOPES = new Set<MatchRetryScope>(["not_found", "ambiguous", "selected", "all"]);
+const RETRY_SCOPES = new Set<MatchRetryScope>(["not_found", "ambiguous", "request_failed", "selected", "all"]);
 
 type RetryBody = {
   scope?: unknown;

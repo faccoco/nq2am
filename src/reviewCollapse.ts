@@ -1,5 +1,5 @@
 type CollapsibleReviewResult = {
-  status: "not_implemented" | "matched" | "not_found" | "ambiguous";
+  status: "not_implemented" | "matched" | "not_found" | "ambiguous" | "request_failed";
   selectionSource?: "auto" | "manual";
   candidates?: readonly unknown[];
 };

@@ -16,6 +16,7 @@ import {
   matchAppleMusic,
   resolveAppleMusicTrackIds
 } from "../src/apple/matcher.js";
+import { AppleRequestExecutionError } from "../src/apple/requestFailure.js";
 import { RequestStartScheduler, runWithRetry } from "../src/apple/requestScheduler.js";
 import type { AppleMatchReport, NormalizedPlaylist } from "../src/types.js";
 import { DEFAULT_MATCH_PREFERENCES } from "../src/types.js";
@@ -79,7 +80,7 @@ function fakeRequestContext(
   } as unknown as APIRequestContext;
 }
 
-test("request scheduler spaces concurrent request starts", async () => {
+test("request scheduler spaces concurrent request starts without a random pause", async () => {
   let now = 0;
   const sleeps: number[] = [];
   const starts: number[] = [];
@@ -153,6 +154,140 @@ test("bounded retry stops after success and runs backoff hooks", async () => {
   assert.equal(result, "ok");
   assert.equal(attempts, 3);
   assert.deepEqual(retries, [1, 2]);
+});
+
+test("Apple API exposes an exhausted rate limit as structured request failure", async () => {
+  const cookies: Cookie[] = [
+    {
+      name: "media-user-token",
+      value: "user-token",
+      domain: ".music.apple.com",
+      path: "/",
+      expires: -1,
+      httpOnly: true,
+      secure: true,
+      sameSite: "None"
+    }
+  ];
+  const context = fakeRequestContext(
+    async () => jsonResponse({ errors: [{ title: "Too Many Requests" }] }, 429),
+    cookies,
+    () => {}
+  );
+  const requestOptions: AppleApiSessionOptions = {
+    maxAttempts: 2,
+    baseRetryDelayMs: 0,
+    minRequestIntervalMs: 150,
+    randomPauseEnabled: true,
+    randomPauseMinMs: 250,
+    randomPauseMaxMs: 750
+  };
+  const originalRequestOptions = { ...requestOptions };
+  const session = new PlaywrightAppleApiSession(
+    context,
+    cookies,
+    "user-token",
+    "developer-token",
+    requestOptions,
+    async () => context,
+    async () => {}
+  );
+
+  await assert.rejects(session.search("Song", "us"), (error) => {
+    assert.ok(error instanceof AppleRequestExecutionError);
+    assert.deepEqual(error.requestFailure, {
+      kind: "rate_limited",
+      operation: "search",
+      status: 429,
+      attempts: 2
+    });
+    return true;
+  });
+  assert.deepEqual(session.getStats(), { requestCount: 2, retryCount: 1 });
+  assert.deepEqual(requestOptions, originalRequestOptions);
+  await session.close();
+});
+
+test("Apple API exposes an exhausted timeout as structured request failure", async () => {
+  const cookies: Cookie[] = [
+    {
+      name: "media-user-token",
+      value: "user-token",
+      domain: ".music.apple.com",
+      path: "/",
+      expires: -1,
+      httpOnly: true,
+      secure: true,
+      sameSite: "None"
+    }
+  ];
+  const context = fakeRequestContext(
+    async () => {
+      throw new Error("apiRequestContext.fetch: Timeout 20ms exceeded");
+    },
+    cookies,
+    () => {}
+  );
+  const session = new PlaywrightAppleApiSession(
+    context,
+    cookies,
+    "user-token",
+    "developer-token",
+    { maxAttempts: 1, minRequestIntervalMs: 0 },
+    async () => context,
+    async () => {}
+  );
+
+  await assert.rejects(session.search("Song", "us"), (error) => {
+    assert.ok(error instanceof AppleRequestExecutionError);
+    assert.deepEqual(error.requestFailure, {
+      kind: "timeout",
+      operation: "search",
+      attempts: 1
+    });
+    return true;
+  });
+  await session.close();
+});
+
+test("Apple API exposes repeated closed contexts as structured session failure", async () => {
+  const cookies: Cookie[] = [
+    {
+      name: "media-user-token",
+      value: "user-token",
+      domain: ".music.apple.com",
+      path: "/",
+      expires: -1,
+      httpOnly: true,
+      secure: true,
+      sameSite: "None"
+    }
+  ];
+  const closedFetch: APIRequestContext["fetch"] = async () => {
+    throw new Error("apiRequestContext.fetch: Target page, context or browser has been closed");
+  };
+  const original = fakeRequestContext(closedFetch, cookies, () => {});
+  const replacement = fakeRequestContext(closedFetch, cookies, () => {});
+  const session = new PlaywrightAppleApiSession(
+    original,
+    cookies,
+    "user-token",
+    "developer-token",
+    { maxAttempts: 2, minRequestIntervalMs: 0 },
+    async () => replacement,
+    async () => {}
+  );
+
+  await assert.rejects(session.search("Song", "us"), (error) => {
+    assert.ok(error instanceof AppleRequestExecutionError);
+    assert.deepEqual(error.requestFailure, {
+      kind: "session",
+      operation: "search",
+      attempts: 2
+    });
+    return true;
+  });
+  await session.close();
 });
 
 test("Apple API session rebuilds a closed request context before retrying", async () => {
@@ -620,9 +755,81 @@ test("matching closes the shared session after track failures", async () => {
     sessionFactory: async () => session
   });
 
-  assert.equal(report.results[0].status, "not_found");
+  assert.equal(report.results[0].status, "request_failed");
   assert.match(report.results[0].reason ?? "", /catalog unavailable/);
+  assert.deepEqual(report.results[0].requestFailure, {
+    kind: "unknown",
+    operation: "search"
+  });
   assert.equal(closeCount, 1);
+});
+
+test("matching marks a session initialization timeout as request failed", async () => {
+  const playlist: NormalizedPlaylist = {
+    provider: "qq",
+    id: "failed-session",
+    tracks: [
+      {
+        originalName: "Song",
+        artists: ["Artist"],
+        source: { provider: "qq", raw: {} }
+      }
+    ],
+    raw: {}
+  };
+
+  const report = await matchAppleMusic(playlist, DEFAULT_MATCH_PREFERENCES, undefined, {
+    logger: () => {},
+    sessionFactory: async () => {
+      throw new Error("Timed out obtaining Apple Music developer token from the web player");
+    }
+  });
+
+  assert.equal(report.results[0].status, "request_failed");
+  assert.deepEqual(report.results[0].requestFailure, {
+    kind: "timeout",
+    operation: "session"
+  });
+});
+
+test("artwork comparison failure preserves an ambiguous metadata decision", async () => {
+  const playlist: NormalizedPlaylist = {
+    provider: "qq",
+    id: "failed-artwork",
+    tracks: [
+      {
+        originalName: "Song",
+        artists: ["Artist"],
+        durationMs: 180_000,
+        albumCoverUrl: cover("red"),
+        source: { provider: "qq", raw: {} }
+      }
+    ],
+    raw: {}
+  };
+  const session = fakeSession({
+    search: async () => [song("one", "Song", "Artist"), song("two", "Song", "Artist")]
+  });
+
+  const report = await matchAppleMusic(
+    playlist,
+    { ...DEFAULT_MATCH_PREFERENCES, storefront: "us", nativeSearch: false },
+    undefined,
+    {
+      logger: () => {},
+      sessionFactory: async () => session,
+      artworkComparatorFactory: () => ({
+        choose: async () => {
+          throw new Error("Artwork request timed out");
+        },
+        getStats: () => ({ featureComputations: 0, cacheHits: 0 }),
+        close: async () => {}
+      })
+    }
+  );
+
+  assert.equal(report.results[0].status, "ambiguous");
+  assert.equal(report.results[0].requestFailure, undefined);
 });
 
 test("manual selections resolve lazily and reuse their addable id", async () => {

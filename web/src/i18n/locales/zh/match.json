@@ -16,6 +16,7 @@
     "matched": "已匹配",
     "not_found": "未找到",
     "ambiguous": "存在歧义",
+    "request_failed": "请求失败",
     "not_implemented": "未实现"
   },
   "stats": {
@@ -23,15 +24,18 @@
     "matched": "已匹配",
     "not_found": "未找到",
     "ambiguous": "存在歧义",
+    "request_failed": "请求失败",
     "pending": "待处理"
   },
   "tabs": {
     "all": "全部（{{count}}）",
     "ambiguous": "存在歧义（{{count}}）",
+    "request_failed": "请求失败（{{count}}）",
     "not_found": "未找到（{{count}}）",
     "matched": "已匹配（{{count}}）"
   },
   "emptyAmbiguous": "没有存在歧义的歌曲。",
+  "emptyRequestFailed": "没有请求失败的歌曲。",
   "emptyNotFound": "没有未找到的歌曲。",
   "reselect": "重新选择",
   "reselectTitle": "重新选择版本",
@@ -48,6 +52,7 @@
   "manual": "（手动）",
   "nativeNotice": "在歌曲的母语区域找到。会正确加入，但你的资料库会按账号区域的语言显示。",
   "notFoundNoReason": "未找到 Apple Music 候选项。",
+  "requestFailedNoReason": "Apple Music 请求在匹配完成前失败。",
   "retry": {
     "action": "重试",
     "running": "正在重试…",
@@ -55,6 +60,7 @@
     "scopeLabel": "重试范围",
     "selectTrack": "选择 {{name}} 用于重试",
     "scopes": {
+      "request_failed": "请求失败（{{count}}）",
       "not_found": "未找到（{{count}}）",
       "ambiguous": "存在歧义（{{count}}）",
       "selected": "已选择（{{count}}）",
