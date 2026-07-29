@@ -1,9 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useParams } from "react-router";
 import { api } from "../api";
+import CreateApplePlaylistDialog from "../components/CreateApplePlaylistDialog";
 import ProviderBadge from "../components/ProviderBadge";
 import ReviewCard from "../components/ReviewCard";
+import type { ApplePlaylistCreationDraft } from "../../../src/applePlaylistCreation";
 import {
   areReviewOptionsCollapsed,
   collapseReviewOptionsAfterChoice,
@@ -53,7 +55,7 @@ export default function MatchPage() {
     useState<MatchRetryScope>("not_found");
   const [retryScopeMenuOpen, setRetryScopeMenuOpen] = useState(false);
   const [createMessage, setCreateMessage] = useState<string | null>(null);
-  const [createError, setCreateError] = useState<string | null>(null);
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [retryError, setRetryError] = useState<string | null>(null);
   const [tab, setTab] = useState<MatchReviewTab>("all");
   const [selectingIdx, setSelectingIdx] = useState<number | null>(null);
@@ -69,6 +71,7 @@ export default function MatchPage() {
   const [retrySelectedIndices, setRetrySelectedIndices] = useState<Set<number>>(
     () => new Set(),
   );
+  const createPlaylistButtonRef = useRef<HTMLButtonElement>(null);
 
   const report: AppleMatchReport | null = job?.report ?? null;
   const isMatching = job?.status === "matching";
@@ -159,13 +162,16 @@ export default function MatchPage() {
     return base;
   }, [report]);
 
-  async function handleCreatePlaylist() {
+  async function handleCreatePlaylist(draft: ApplePlaylistCreationDraft) {
     if (!report) return;
-    setCreateError(null);
     setCreateMessage(null);
     setCreating(true);
     try {
-      const res = await api.createApplePlaylist(id, report.playlistName);
+      const res = await api.createApplePlaylist(
+        id,
+        draft.name,
+        draft.description,
+      );
       setCreateMessage(
         t("createdMessage", {
           idSuffix: res.playlistId
@@ -173,9 +179,10 @@ export default function MatchPage() {
             : "",
         }),
       );
+      setCreateDialogOpen(false);
       void refreshTasks();
     } catch (err) {
-      setCreateError(err instanceof Error ? err.message : String(err));
+      throw err instanceof Error ? err : new Error(String(err));
     } finally {
       setCreating(false);
     }
@@ -454,8 +461,12 @@ export default function MatchPage() {
             </div>
             {stats.matched > 0 && (
               <button
+                ref={createPlaylistButtonRef}
                 type="button"
-                onClick={handleCreatePlaylist}
+                onClick={() => {
+                  setCreateMessage(null);
+                  setCreateDialogOpen(true);
+                }}
                 disabled={creating}
                 className="rounded-md bg-indigo-500 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-400 disabled:opacity-50"
               >
@@ -464,9 +475,9 @@ export default function MatchPage() {
             )}
           </div>
         </div>
-        {(createError || retryError) && (
+        {retryError && (
           <div className="rounded-md border border-red-500/40 bg-red-500/10 px-4 py-2 text-sm text-red-200">
-            {createError ?? retryError}
+            {retryError}
           </div>
         )}
         {createMessage && (
@@ -711,6 +722,18 @@ export default function MatchPage() {
             />
           </div>
         </div>
+      )}
+
+      {createDialogOpen && (
+        <CreateApplePlaylistDialog
+          source={{
+            name: job?.sourcePlaylist?.name ?? report.playlistName,
+            description: job?.sourcePlaylist?.description,
+          }}
+          returnFocusRef={createPlaylistButtonRef}
+          onCancel={() => setCreateDialogOpen(false)}
+          onConfirm={handleCreatePlaylist}
+        />
       )}
 
       {showGoTop && (

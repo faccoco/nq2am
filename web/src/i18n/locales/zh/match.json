@@ -71,6 +71,17 @@
   "creating": "正在创建…",
   "createdMessage": "已创建 Apple Music 歌单{{idSuffix}}。",
   "createdIdSuffix": "（ID：{{playlistId}}）",
+  "createDialog": {
+    "title": "创建 Apple Music 歌单",
+    "name": "歌单名称",
+    "nameRequired": "请输入歌单名称。",
+    "description": "描述",
+    "cancel": "取消",
+    "confirm": "创建歌单",
+    "creating": "正在创建…",
+    "close": "关闭",
+    "failure": "无法创建歌单：{{error}}"
+  },
   "original": {
     "heading": "原曲",
     "songName": "歌曲名称",

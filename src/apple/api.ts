@@ -1,5 +1,5 @@
 import { performance } from "node:perf_hooks";
-import { type Browser, type BrowserContext, chromium } from "playwright";
+import { type APIRequestContext, type Browser, type BrowserContext, type Cookie, chromium, request } from "playwright";
 import { loadCookies, saveCookies } from "../fetchers/auth.js";
 import { RequestStartScheduler, runWithRetry } from "./requestScheduler.js";
 
@@ -93,6 +93,11 @@ async function getBrowser(): Promise<Browser> {
       .launch({ headless: true })
       .then((browser) => {
         sharedBrowser = browser;
+        browser.on("disconnected", () => {
+          if (sharedBrowser === browser) {
+            sharedBrowser = undefined;
+          }
+        });
         return browser;
       })
       .finally(() => {
@@ -196,13 +201,24 @@ async function captureDeveloperToken(context: BrowserContext): Promise<string> {
   }
 }
 
-async function getDeveloperToken(context: BrowserContext): Promise<string> {
+async function captureDeveloperTokenWithCookies(cookies: Cookie[]): Promise<string> {
+  const browser = await getBrowser();
+  const context = await browser.newContext();
+  try {
+    await context.addCookies(cookies);
+    return await captureDeveloperToken(context);
+  } finally {
+    await context.close().catch(() => {});
+  }
+}
+
+async function getDeveloperToken(cookies: Cookie[]): Promise<string> {
   if (cachedDeveloperToken) {
     return cachedDeveloperToken;
   }
 
   if (!tokenCapturePromise) {
-    tokenCapturePromise = captureDeveloperToken(context)
+    tokenCapturePromise = captureDeveloperTokenWithCookies(cookies)
       .then((token) => {
         cachedDeveloperToken = token;
         return token;
@@ -215,11 +231,11 @@ async function getDeveloperToken(context: BrowserContext): Promise<string> {
   return tokenCapturePromise;
 }
 
-async function refreshDeveloperToken(context: BrowserContext, staleToken: string): Promise<string> {
+async function refreshDeveloperToken(cookies: Cookie[], staleToken: string): Promise<string> {
   if (cachedDeveloperToken === staleToken) {
     cachedDeveloperToken = undefined;
   }
-  return getDeveloperToken(context);
+  return getDeveloperToken(cookies);
 }
 
 class AppleApiError extends Error {
@@ -247,7 +263,17 @@ function parseRetryAfter(value: string | undefined): number | undefined {
   return Number.isFinite(dateMs) ? Math.max(0, dateMs - Date.now()) : undefined;
 }
 
-function isRetryable(error: unknown, attempt: number): boolean {
+function isRetryable(error: unknown, attempt: number, operation: AppleApiOperation): boolean {
+  if (operation === "create_playlist") {
+    if (!(error instanceof AppleApiError)) {
+      return false;
+    }
+    if (error.status === 401) {
+      return attempt === 1;
+    }
+    return error.status === 429;
+  }
+
   if (!(error instanceof AppleApiError)) {
     return true;
   }
@@ -257,7 +283,37 @@ function isRetryable(error: unknown, attempt: number): boolean {
   return error.status === 429 || error.status >= 500;
 }
 
-class BrowserAppleApiSession implements AppleApiSession {
+type AppleRequestContextFactory = (cookies: Cookie[]) => Promise<APIRequestContext>;
+type AppleCookieSaver = (cookies: Cookie[]) => Promise<void>;
+
+async function createIsolatedRequestContext(cookies: Cookie[]): Promise<APIRequestContext> {
+  return request.newContext({
+    baseURL: "https://amp-api.music.apple.com",
+    storageState: { cookies, origins: [] }
+  });
+}
+
+function isTargetClosedError(error: unknown): error is Error {
+  return (
+    error instanceof Error &&
+    /target (?:page, )?context or browser has been closed|targetclosederror|request context (?:has been )?(?:closed|disposed)/iu.test(
+      error.message
+    )
+  );
+}
+
+class AppleRequestContextClosedError extends Error {
+  readonly name = "AppleRequestContextClosedError";
+
+  constructor(
+    readonly requestContext: APIRequestContext,
+    error: Error
+  ) {
+    super(error.message);
+  }
+}
+
+export class PlaywrightAppleApiSession implements AppleApiSession {
   private readonly scheduler: RequestStartScheduler;
   private readonly requestTimeoutMs: number;
   private readonly maxAttempts: number;
@@ -265,13 +321,21 @@ class BrowserAppleApiSession implements AppleApiSession {
   private readonly onRequest?: (metric: AppleApiRequestMetric) => void;
   private requestCount = 0;
   private retryCount = 0;
+  private activeRequestCount = 0;
+  private idleResolvers: Array<() => void> = [];
+  private closing = false;
   private closed = false;
+  private closePromise: Promise<void> | undefined;
+  private recoveryPromise: Promise<void> | undefined;
 
   constructor(
-    private readonly context: BrowserContext,
+    private requestContext: APIRequestContext,
+    private cookies: Cookie[],
     private readonly mediaUserToken: string,
     private developerToken: string,
-    options: AppleApiSessionOptions
+    options: AppleApiSessionOptions,
+    private readonly requestContextFactory: AppleRequestContextFactory = createIsolatedRequestContext,
+    private readonly cookieSaver: AppleCookieSaver = (updatedCookies) => saveCookies("apple", updatedCookies)
   ) {
     this.requestTimeoutMs = options.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
     this.maxAttempts = options.maxAttempts ?? DEFAULT_MAX_ATTEMPTS;
@@ -328,15 +392,26 @@ class BrowserAppleApiSession implements AppleApiSession {
   }
 
   async close(): Promise<void> {
-    if (this.closed) {
-      return;
+    if (!this.closePromise) {
+      this.closing = true;
+      this.closePromise = this.finishClose();
     }
-    this.closed = true;
+    return this.closePromise;
+  }
 
+  private async finishClose(): Promise<void> {
+    await this.waitForRequestsToFinish();
+    await this.recoveryPromise?.catch(() => {});
+    this.closed = true;
+    const context = this.requestContext;
     try {
-      await saveCookies("apple", await this.context.cookies()).catch(() => {});
+      const state = await context.storageState().catch(() => undefined);
+      if (state?.cookies.length) {
+        this.cookies = state.cookies;
+      }
+      await this.cookieSaver(this.cookies).catch(() => {});
     } finally {
-      await this.context.close();
+      await context.dispose().catch(() => {});
     }
   }
 
@@ -345,80 +420,162 @@ class BrowserAppleApiSession implements AppleApiSession {
     path: string,
     init?: { method?: string; body?: string }
   ): Promise<T> {
-    return runWithRetry(
-      async (attempt) => {
-        if (attempt > 1) {
-          this.retryCount += 1;
-        }
-        this.requestCount += 1;
+    if (this.closing || this.closed) {
+      throw new Error("Apple Music API session is closed");
+    }
+    this.activeRequestCount += 1;
 
-        const startedAt = performance.now();
-        let status: number | undefined;
-        try {
-          const value = await this.scheduler.schedule(async () => {
-            const response = await this.context.request.fetch(`https://amp-api.music.apple.com${path}`, {
-              method: init?.method ?? "GET",
-              headers: {
-                Accept: "application/json",
-                Authorization: `Bearer ${this.developerToken}`,
-                "Content-Type": "application/json",
-                "Music-User-Token": this.mediaUserToken,
-                Origin: "https://music.apple.com",
-                Referer: "https://music.apple.com/"
-              },
-              ...(init?.body === undefined ? {} : { data: init.body }),
-              failOnStatusCode: false,
-              timeout: this.requestTimeoutMs
+    try {
+      return await runWithRetry(
+        async (attempt) => {
+          if (attempt > 1) {
+            this.retryCount += 1;
+          }
+          this.requestCount += 1;
+
+          const startedAt = performance.now();
+          let status: number | undefined;
+          const requestContext = this.requestContext;
+          try {
+            const value = await this.scheduler.schedule(async () => {
+              const response = await requestContext.fetch(path, {
+                method: init?.method ?? "GET",
+                headers: {
+                  Accept: "application/json",
+                  Authorization: `Bearer ${this.developerToken}`,
+                  "Content-Type": "application/json",
+                  "Music-User-Token": this.mediaUserToken,
+                  Origin: "https://music.apple.com",
+                  Referer: "https://music.apple.com/"
+                },
+                ...(init?.body === undefined ? {} : { data: init.body }),
+                failOnStatusCode: false,
+                timeout: this.requestTimeoutMs
+              });
+
+              try {
+                status = response.status();
+                const text = await response.text();
+                if (!response.ok()) {
+                  const retryAfterMs = parseRetryAfter(response.headers()["retry-after"]);
+                  throw new AppleApiError(status, `Apple Music API ${status}: ${text.slice(0, 200)}`, retryAfterMs);
+                }
+                return JSON.parse(text) as T;
+              } finally {
+                await response.dispose().catch(() => {});
+              }
             });
 
-            try {
-              status = response.status();
-              const text = await response.text();
-              if (!response.ok()) {
-                const retryAfterMs = parseRetryAfter(response.headers()["retry-after"]);
-                throw new AppleApiError(status, `Apple Music API ${status}: ${text.slice(0, 200)}`, retryAfterMs);
-              }
-              return JSON.parse(text) as T;
-            } finally {
-              await response.dispose();
+            this.onRequest?.({
+              operation,
+              attempt,
+              durationMs: performance.now() - startedAt,
+              outcome: "success",
+              status
+            });
+            return value;
+          } catch (error) {
+            status = error instanceof AppleApiError ? error.status : status;
+            this.onRequest?.({
+              operation,
+              attempt,
+              durationMs: performance.now() - startedAt,
+              outcome: "error",
+              status
+            });
+            if (isTargetClosedError(error)) {
+              throw new AppleRequestContextClosedError(requestContext, error);
             }
-          });
-
-          this.onRequest?.({
-            operation,
-            attempt,
-            durationMs: performance.now() - startedAt,
-            outcome: "success",
-            status
-          });
-          return value;
-        } catch (error) {
-          status = error instanceof AppleApiError ? error.status : status;
-          this.onRequest?.({
-            operation,
-            attempt,
-            durationMs: performance.now() - startedAt,
-            outcome: "error",
-            status
-          });
-          throw error;
-        }
-      },
-      {
-        maxAttempts: this.maxAttempts,
-        shouldRetry: isRetryable,
-        beforeRetry: async (error, attempt) => {
-          if (error instanceof AppleApiError && error.status === 401) {
-            this.developerToken = await refreshDeveloperToken(this.context, this.developerToken);
-            return;
+            throw error;
           }
+        },
+        {
+          maxAttempts: this.maxAttempts,
+          shouldRetry: (error, attempt) => isRetryable(error, attempt, operation),
+          beforeRetry: async (error, attempt) => {
+            if (error instanceof AppleRequestContextClosedError) {
+              await this.recoverRequestContext(error.requestContext);
+              return;
+            }
 
-          const retryAfterMs = error instanceof AppleApiError ? error.retryAfterMs : undefined;
-          const backoffMs = retryAfterMs ?? this.baseRetryDelayMs * 2 ** (attempt - 1);
-          this.scheduler.deferNextStart(backoffMs);
+            if (error instanceof AppleApiError && error.status === 401) {
+              this.developerToken = await refreshDeveloperToken(
+                await this.readCookies(this.requestContext),
+                this.developerToken
+              );
+              return;
+            }
+
+            const retryAfterMs = error instanceof AppleApiError ? error.retryAfterMs : undefined;
+            const backoffMs = retryAfterMs ?? this.baseRetryDelayMs * 2 ** (attempt - 1);
+            this.scheduler.deferNextStart(backoffMs);
+          }
+        }
+      );
+    } finally {
+      this.activeRequestCount -= 1;
+      if (this.activeRequestCount === 0) {
+        const resolvers = this.idleResolvers;
+        this.idleResolvers = [];
+        for (const resolve of resolvers) {
+          resolve();
         }
       }
-    );
+    }
+  }
+
+  private async waitForRequestsToFinish(): Promise<void> {
+    if (this.activeRequestCount === 0) {
+      return;
+    }
+    await new Promise<void>((resolve) => {
+      this.idleResolvers.push(resolve);
+    });
+  }
+
+  private async readCookies(context: APIRequestContext): Promise<Cookie[]> {
+    const state = await context.storageState().catch(() => undefined);
+    if (state?.cookies.length) {
+      this.cookies = state.cookies;
+    }
+    return this.cookies;
+  }
+
+  private async recoverRequestContext(failedContext: APIRequestContext): Promise<void> {
+    if (this.closed) {
+      throw new Error("Apple Music API session is closed");
+    }
+    if (failedContext !== this.requestContext) {
+      return;
+    }
+
+    if (!this.recoveryPromise) {
+      const recovery = (async () => {
+        const cookies = await this.readCookies(failedContext);
+        const replacement = await this.requestContextFactory(cookies);
+        if (this.closed) {
+          await replacement.dispose().catch(() => {});
+          throw new Error("Apple Music API session is closed");
+        }
+        if (failedContext !== this.requestContext) {
+          await replacement.dispose().catch(() => {});
+          return;
+        }
+
+        this.requestContext = replacement;
+        await failedContext.dispose().catch(() => {});
+      })();
+      this.recoveryPromise = recovery;
+      void recovery
+        .finally(() => {
+          if (this.recoveryPromise === recovery) {
+            this.recoveryPromise = undefined;
+          }
+        })
+        .catch(() => {});
+    }
+
+    await this.recoveryPromise;
   }
 }
 
@@ -433,16 +590,9 @@ export async function createAppleApiSession(options: AppleApiSessionOptions = {}
     throw new Error("Apple Music session expired. Please log in again.");
   }
 
-  const browser = await getBrowser();
-  const context = await browser.newContext();
-  try {
-    await context.addCookies(cookies);
-    const developerToken = await getDeveloperToken(context);
-    return new BrowserAppleApiSession(context, mediaUserToken, developerToken, options);
-  } catch (error) {
-    await context.close();
-    throw error;
-  }
+  const developerToken = await getDeveloperToken(cookies);
+  const requestContext = await createIsolatedRequestContext(cookies);
+  return new PlaywrightAppleApiSession(requestContext, cookies, mediaUserToken, developerToken, options);
 }
 
 async function withOneShotSession<T>(operation: (session: AppleApiSession) => Promise<T>): Promise<T> {

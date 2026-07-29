@@ -40,6 +40,31 @@ async function invokeSelectTrackRoute(playlistId: string, idx: string, body: unk
   return { statusCode, jsonBody };
 }
 
+async function invokeGetMatchRoute(playlistId: string) {
+  const matchRouter = (await import("../server/routes/match.js")).default as unknown as { stack: RouteLayer[] };
+  const layer = matchRouter.stack.find(
+    (item) => item.route?.path === "/match-apple/:playlistId" && item.route.methods.get
+  );
+  assert.ok(layer?.route, "get-match route should exist");
+
+  let statusCode = 200;
+  let jsonBody: unknown;
+  const req = { params: { playlistId } };
+  const res = {
+    status(code: number) {
+      statusCode = code;
+      return res;
+    },
+    json(data: unknown) {
+      jsonBody = data;
+      return res;
+    }
+  };
+
+  await layer.route.stack[0].handle(req, res);
+  return { statusCode, jsonBody };
+}
+
 test("match route accepts null appleMusicId to mark a track as no match", async () => {
   const playlist: NormalizedPlaylist = {
     provider: "qq",
@@ -92,5 +117,45 @@ test("match route accepts null appleMusicId to mark a track as no match", async 
     appleMusicUrl: undefined,
     candidates: report.results[0].candidates,
     reason: "Marked as no match"
+  });
+});
+
+test("match status route includes source playlist metadata", async () => {
+  const playlist: NormalizedPlaylist = {
+    provider: "netease",
+    id: "route-source-metadata",
+    name: "Source playlist",
+    description: "Source description",
+    tracks: [
+      {
+        originalName: "Song",
+        artists: ["Artist"],
+        source: { provider: "netease", raw: {} }
+      }
+    ],
+    raw: {}
+  };
+  const { addPlaylist, setMatchReport } = await import("../server/state.js");
+  const key = await addPlaylist(playlist);
+  const report: AppleMatchReport = {
+    provider: playlist.provider,
+    playlistId: playlist.id,
+    playlistName: playlist.name,
+    results: [{ track: playlist.tracks[0], status: "not_found", candidates: [] }]
+  };
+  setMatchReport(key, report);
+
+  const res = await invokeGetMatchRoute(key);
+
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(res.jsonBody, {
+    status: "matched",
+    progress: undefined,
+    error: undefined,
+    sourcePlaylist: {
+      name: "Source playlist",
+      description: "Source description"
+    },
+    report
   });
 });

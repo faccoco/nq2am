@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { AppleApiRequestMetric, AppleApiSession, AppleApiSessionOptions, AppleSong } from "../src/apple/api.js";
+import type { APIRequestContext, APIResponse, Cookie } from "playwright";
+import {
+  type AppleApiRequestMetric,
+  type AppleApiSession,
+  type AppleApiSessionOptions,
+  type AppleSong,
+  PlaywrightAppleApiSession
+} from "../src/apple/api.js";
 import { createArtworkComparator } from "../src/apple/artwork.js";
 import { mapWithConcurrency } from "../src/apple/concurrency.js";
 import {
@@ -45,6 +52,31 @@ function fakeSession(
     close: async () => {},
     ...implementation
   };
+}
+
+function jsonResponse(value: unknown, status = 200, dispose: () => Promise<void> = async () => {}): APIResponse {
+  const body = JSON.stringify(value);
+  return {
+    dispose,
+    headers: () => ({}),
+    ok: () => status >= 200 && status < 300,
+    status: () => status,
+    text: async () => body
+  } as unknown as APIResponse;
+}
+
+function fakeRequestContext(
+  fetch: APIRequestContext["fetch"],
+  cookies: Cookie[],
+  onDispose: () => void
+): APIRequestContext {
+  return {
+    dispose: async () => {
+      onDispose();
+    },
+    fetch,
+    storageState: async () => ({ cookies, origins: [] })
+  } as unknown as APIRequestContext;
 }
 
 test("request scheduler spaces concurrent request starts", async () => {
@@ -121,6 +153,265 @@ test("bounded retry stops after success and runs backoff hooks", async () => {
   assert.equal(result, "ok");
   assert.equal(attempts, 3);
   assert.deepEqual(retries, [1, 2]);
+});
+
+test("Apple API session rebuilds a closed request context before retrying", async () => {
+  const cookies: Cookie[] = [
+    {
+      name: "media-user-token",
+      value: "user-token",
+      domain: ".music.apple.com",
+      path: "/",
+      expires: -1,
+      httpOnly: true,
+      secure: true,
+      sameSite: "None"
+    }
+  ];
+  let originalDisposeCount = 0;
+  let replacementDisposeCount = 0;
+  let replacementFactoryCount = 0;
+  let savedCookies: Cookie[] | undefined;
+
+  const original = fakeRequestContext(
+    async () => {
+      throw new Error("apiRequestContext.fetch: Target page, context or browser has been closed");
+    },
+    cookies,
+    () => {
+      originalDisposeCount += 1;
+    }
+  );
+  const replacement = fakeRequestContext(
+    async () => jsonResponse({ data: [{ id: "jp" }] }),
+    cookies,
+    () => {
+      replacementDisposeCount += 1;
+    }
+  );
+  const session = new PlaywrightAppleApiSession(
+    original,
+    cookies,
+    "user-token",
+    "developer-token",
+    {
+      maxAttempts: 2,
+      minRequestIntervalMs: 0
+    },
+    async () => {
+      replacementFactoryCount += 1;
+      return replacement;
+    },
+    async (updatedCookies) => {
+      savedCookies = updatedCookies;
+    }
+  );
+
+  assert.equal(await session.getStorefront(), "jp");
+  assert.equal(replacementFactoryCount, 1);
+  assert.equal(originalDisposeCount, 1);
+  assert.deepEqual(session.getStats(), { requestCount: 2, retryCount: 1 });
+
+  await session.close();
+  assert.equal(replacementDisposeCount, 1);
+  assert.deepEqual(savedCookies, cookies);
+});
+
+test("concurrent target-closed failures share one replacement request context", async () => {
+  const cookies: Cookie[] = [
+    {
+      name: "media-user-token",
+      value: "user-token",
+      domain: ".music.apple.com",
+      path: "/",
+      expires: -1,
+      httpOnly: true,
+      secure: true,
+      sameSite: "None"
+    }
+  ];
+  let originalDisposeCount = 0;
+  let replacementDisposeCount = 0;
+  let replacementFactoryCount = 0;
+
+  const original = fakeRequestContext(
+    async () => {
+      throw new Error("apiRequestContext.fetch: Target page, context or browser has been closed");
+    },
+    cookies,
+    () => {
+      originalDisposeCount += 1;
+    }
+  );
+  const replacement = fakeRequestContext(
+    async (path) =>
+      jsonResponse(path.toString().includes("/search") ? { results: { songs: { data: [] } } } : { data: [] }),
+    cookies,
+    () => {
+      replacementDisposeCount += 1;
+    }
+  );
+  const session = new PlaywrightAppleApiSession(
+    original,
+    cookies,
+    "user-token",
+    "developer-token",
+    {
+      maxAttempts: 2,
+      minRequestIntervalMs: 0
+    },
+    async () => {
+      replacementFactoryCount += 1;
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      return replacement;
+    },
+    async () => {}
+  );
+
+  await Promise.all([session.search("Song", "us"), session.songsByIsrc("ISRC", "us")]);
+
+  assert.equal(replacementFactoryCount, 1);
+  assert.equal(originalDisposeCount, 1);
+  assert.deepEqual(session.getStats(), { requestCount: 4, retryCount: 2 });
+
+  await session.close();
+  assert.equal(replacementDisposeCount, 1);
+});
+
+test("playlist creation keeps a successful response when response cleanup fails", async () => {
+  const cookies: Cookie[] = [
+    {
+      name: "media-user-token",
+      value: "user-token",
+      domain: ".music.apple.com",
+      path: "/",
+      expires: -1,
+      httpOnly: true,
+      secure: true,
+      sameSite: "None"
+    }
+  ];
+  let replacementFactoryCount = 0;
+  const context = fakeRequestContext(
+    async () =>
+      jsonResponse({ data: [{ id: "created-playlist" }] }, 201, async () => {
+        throw new Error("apiResponse.dispose: Target page, context or browser has been closed");
+      }),
+    cookies,
+    () => {}
+  );
+  const session = new PlaywrightAppleApiSession(
+    context,
+    cookies,
+    "user-token",
+    "developer-token",
+    { maxAttempts: 3, minRequestIntervalMs: 0 },
+    async () => {
+      replacementFactoryCount += 1;
+      return context;
+    },
+    async () => {}
+  );
+
+  assert.equal(await session.createPlaylist("Name", "Description", ["song"]), "created-playlist");
+  assert.equal(replacementFactoryCount, 0);
+  assert.deepEqual(session.getStats(), { requestCount: 1, retryCount: 0 });
+  await session.close();
+});
+
+test("playlist creation does not repeat an uncertain transport failure", async () => {
+  const cookies: Cookie[] = [
+    {
+      name: "media-user-token",
+      value: "user-token",
+      domain: ".music.apple.com",
+      path: "/",
+      expires: -1,
+      httpOnly: true,
+      secure: true,
+      sameSite: "None"
+    }
+  ];
+  let fetchCount = 0;
+  let replacementFactoryCount = 0;
+  const context = fakeRequestContext(
+    async () => {
+      fetchCount += 1;
+      throw new Error("apiRequestContext.fetch: Target page, context or browser has been closed");
+    },
+    cookies,
+    () => {}
+  );
+  const session = new PlaywrightAppleApiSession(
+    context,
+    cookies,
+    "user-token",
+    "developer-token",
+    { maxAttempts: 3, minRequestIntervalMs: 0 },
+    async () => {
+      replacementFactoryCount += 1;
+      return context;
+    },
+    async () => {}
+  );
+
+  await assert.rejects(
+    session.createPlaylist("Name", "Description", ["song"]),
+    /Target page, context or browser has been closed/
+  );
+  assert.equal(fetchCount, 1);
+  assert.equal(replacementFactoryCount, 0);
+  assert.deepEqual(session.getStats(), { requestCount: 1, retryCount: 0 });
+  await session.close();
+});
+
+test("closing an Apple API session waits for its active request", async () => {
+  const cookies: Cookie[] = [
+    {
+      name: "media-user-token",
+      value: "user-token",
+      domain: ".music.apple.com",
+      path: "/",
+      expires: -1,
+      httpOnly: true,
+      secure: true,
+      sameSite: "None"
+    }
+  ];
+  let releaseFetch!: () => void;
+  let contextDisposed = false;
+  const fetchGate = new Promise<void>((resolve) => {
+    releaseFetch = resolve;
+  });
+  const context = fakeRequestContext(
+    async () => {
+      await fetchGate;
+      return jsonResponse({ data: [{ id: "us" }] });
+    },
+    cookies,
+    () => {
+      contextDisposed = true;
+    }
+  );
+  const session = new PlaywrightAppleApiSession(
+    context,
+    cookies,
+    "user-token",
+    "developer-token",
+    { minRequestIntervalMs: 0 },
+    async () => context,
+    async () => {}
+  );
+
+  const requestPromise = session.getStorefront();
+  const closePromise = session.close();
+  await Promise.resolve();
+  assert.equal(contextDisposed, false);
+
+  releaseFetch();
+  assert.equal(await requestPromise, "us");
+  await closePromise;
+  assert.equal(contextDisposed, true);
 });
 
 test("worker pool bounds concurrency and preserves source order", async () => {

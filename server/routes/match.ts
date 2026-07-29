@@ -151,6 +151,10 @@ router.get("/match-apple/:playlistId", async (req, res) => {
     status: task.status,
     progress: task.matchProgress,
     error: task.error,
+    sourcePlaylist: {
+      name: task.playlist.name,
+      description: task.playlist.description
+    },
     report: report ?? null
   });
 });

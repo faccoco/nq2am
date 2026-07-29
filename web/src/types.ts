@@ -137,5 +137,9 @@ export type MatchJob = {
   status: TaskStatus;
   progress?: { processed: number; total: number };
   error?: string;
+  sourcePlaylist: {
+    name?: string;
+    description?: string;
+  };
   report: AppleMatchReport | null;
 };

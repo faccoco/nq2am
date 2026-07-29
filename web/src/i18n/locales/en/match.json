@@ -71,6 +71,17 @@
   "creating": "Creating…",
   "createdMessage": "Apple Music playlist created{{idSuffix}}.",
   "createdIdSuffix": " (ID: {{playlistId}})",
+  "createDialog": {
+    "title": "Create Apple Music Playlist",
+    "name": "Playlist name",
+    "nameRequired": "Enter a playlist name.",
+    "description": "Description",
+    "cancel": "Cancel",
+    "confirm": "Create playlist",
+    "creating": "Creating…",
+    "close": "Close",
+    "failure": "Could not create the playlist: {{error}}"
+  },
   "original": {
     "heading": "Original",
     "songName": "Song name",
