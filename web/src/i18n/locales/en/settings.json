@@ -37,7 +37,7 @@
     "ambiguityGap": {
       "label": "Ambiguity gap:",
       "help": "Higher means close choices are reviewed instead of auto-picked.",
-      "tooltip": "After the best candidate passes the threshold, nq2am compares it with the second-best score. If best minus second-best is smaller than this gap, it tries explicit/clean preference and cover similarity; if still unclear, the track goes to Ambiguous."
+      "tooltip": "After the best candidate passes the threshold, nq2am compares it with the second-best score. If best minus second-best is smaller than this gap, the track goes to Ambiguous for manual review."
     },
     "explicit": {
       "label": "Explicit / clean preference",
@@ -53,24 +53,12 @@
       "label": "Storefront",
       "placeholder": "auto (from your account)",
       "help": "Leave blank unless your Apple Music account region is detected wrong.",
-      "tooltip": "This is the Apple Music account region used when creating the final playlist, such as us, jp, or cn. Native-region search can still search JP/KR/CN first, then resolve the chosen song back to this account region by ISRC."
+      "tooltip": "This is the Apple Music account region used when creating the final playlist, such as us, jp, or cn."
     },
     "preferDuration": "Prefer candidates whose duration is closest to the source track",
     "preferDurationTooltip": "Adds a small score bonus when the Apple Music duration is close to the source track. The bonus is strongest within about 2 seconds and fades out by about 30 seconds.",
     "preferOriginal": "Prefer original studio versions over remaster / live / karaoke",
     "preferOriginalTooltip": "Applies a small penalty to candidates whose title looks like remaster, live, karaoke, instrumental, cover, version, or remix, unless the source title also asks for that version.",
-    "nativeSearch": "Search non-English tracks in their native region",
-    "nativeSearchTooltip": "For Japanese, Korean, and Chinese metadata, nq2am may search the matching Apple Music region first because local titles and covers are often more accurate there. If the chosen song has an ISRC, it then finds the same song in your account region for playlist creation.",
-    "nativeSearchHelp": "Useful for JP/KR/CN songs whose account-region metadata is romanized, translated, or missing.",
-    "cjk": {
-      "label": "Region detection for CJK tracks",
-      "options": {
-        "source": "By source (NetEase/QQ → China)",
-        "text": "By text (kanji → Japan)"
-      },
-      "help": "Use text mode when many Japanese songs come from NetEase or QQ.",
-      "tooltip": "\"By source\" treats Han-only tracks from NetEase/QQ as China, while kana still maps to Japan and hangul maps to Korea. \"By text\" treats Han-only titles as Japanese, which helps Vocaloid/J-pop albums hosted on Chinese providers."
-    },
     "performance": {
       "title": "Performance and request pacing",
       "description": "These values apply to new matches, retries, cross-region song resolution, and playlist creation.",
@@ -98,11 +86,6 @@
         "label": "Initial retry delay",
         "help": "Doubles after each failed attempt.",
         "tooltip": "Base delay for exponential retry backoff. An Apple Retry-After response takes precedence when present."
-      },
-      "artworkTimeout": {
-        "label": "Artwork timeout",
-        "help": "Applied to download and decode separately.",
-        "tooltip": "Maximum time spent downloading or decoding one cover before cover comparison skips it. This does not change metadata scoring."
       },
       "randomPause": {
         "label": "Random request pauses",

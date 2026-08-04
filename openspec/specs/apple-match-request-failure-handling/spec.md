@@ -29,10 +29,6 @@ The system SHALL store a track-level Apple catalog failure as `request_failed` w
 - **WHEN** Apple returns candidates but none satisfies the matching decision rules
 - **THEN** the track result remains `not_found`
 
-#### Scenario: Optional artwork comparison fails
-- **WHEN** an artwork download or comparison times out after metadata candidates were evaluated
-- **THEN** the matcher preserves the metadata decision, including `ambiguous` when no tie-breaker is decisive, rather than producing `request_failed`
-
 ### Requirement: Request-failure review
 The matching report UI SHALL present request failures separately from not-found tracks in both English and Chinese.
 

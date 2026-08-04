@@ -8,14 +8,8 @@ import {
   type AppleSong,
   PlaywrightAppleApiSession
 } from "../src/apple/api.js";
-import { createArtworkComparator } from "../src/apple/artwork.js";
 import { mapWithConcurrency } from "../src/apple/concurrency.js";
-import {
-  type AppleMatchLogEvent,
-  createAppleMusicPlaylistFromReport,
-  matchAppleMusic,
-  resolveAppleMusicTrackIds
-} from "../src/apple/matcher.js";
+import { type AppleMatchLogEvent, createAppleMusicPlaylistFromReport, matchAppleMusic } from "../src/apple/matcher.js";
 import { AppleRequestExecutionError } from "../src/apple/requestFailure.js";
 import { RequestStartScheduler, runWithRetry } from "../src/apple/requestScheduler.js";
 import type { AppleMatchReport, NormalizedPlaylist } from "../src/types.js";
@@ -35,18 +29,12 @@ function song(id: string, name: string, artistName: string, isrc?: string, album
   };
 }
 
-function cover(fill: string): string {
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" fill="${fill}"/></svg>`;
-  return `data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`;
-}
-
 function fakeSession(
   implementation: Partial<AppleApiSession> = {},
   stats = { requestCount: 0, retryCount: 0 }
 ): AppleApiSession {
   return {
     search: async () => [],
-    songsByIsrc: async () => [],
     getStorefront: async () => "us",
     createPlaylist: async () => "playlist",
     getStats: () => stats,
@@ -403,7 +391,7 @@ test("concurrent target-closed failures share one replacement request context", 
     async () => {}
   );
 
-  await Promise.all([session.search("Song", "us"), session.songsByIsrc("ISRC", "us")]);
+  await Promise.all([session.search("Song", "us"), session.search("Other", "us")]);
 
   assert.equal(replacementFactoryCount, 1);
   assert.equal(originalDisposeCount, 1);
@@ -636,7 +624,6 @@ test("playlist matching reuses one session, closes it, and preserves result orde
     playlist,
     {
       ...DEFAULT_MATCH_PREFERENCES,
-      nativeSearch: false,
       matchConcurrency: 2,
       appleRequestIntervalMs: 425,
       appleRequestTimeoutMs: 21_000,
@@ -644,8 +631,7 @@ test("playlist matching reuses one session, closes it, and preserves result orde
       appleRetryBaseDelayMs: 1_250,
       appleRandomPauseEnabled: true,
       appleRandomPauseMinMs: 300,
-      appleRandomPauseMaxMs: 900,
-      artworkTimeoutMs: 12_000
+      appleRandomPauseMaxMs: 900
     },
     (processed) => progress.push(processed),
     {
@@ -679,52 +665,6 @@ test("playlist matching reuses one session, closes it, and preserves result orde
   assert.equal(sessionOptions?.randomPauseEnabled, true);
   assert.equal(sessionOptions?.randomPauseMinMs, 300);
   assert.equal(sessionOptions?.randomPauseMaxMs, 900);
-});
-
-test("native-store matching bridges only the automatically selected candidate", async () => {
-  const isrcLookups: string[] = [];
-  let closeCount = 0;
-  const session = fakeSession({
-    search: async (term) => {
-      if (term.startsWith("ゆめ")) {
-        return [song("native-winner", "ゆめ", "Artist", "WINNER"), song("native-wrong", "Different", "Other", "WRONG")];
-      }
-      return [
-        song("ambiguous-a", "なみ", "Artist", "AMBIGUOUS-A", "Album A"),
-        song("ambiguous-b", "なみ", "Artist", "AMBIGUOUS-B", "Album B")
-      ];
-    },
-    songsByIsrc: async (isrc) => {
-      isrcLookups.push(isrc);
-      return [song("account-winner", "ゆめ", "Artist", isrc)];
-    },
-    close: async () => {
-      closeCount += 1;
-    }
-  });
-  const playlist: NormalizedPlaylist = {
-    provider: "netease",
-    id: "lazy-isrc",
-    name: "Lazy ISRC",
-    tracks: ["ゆめ", "なみ"].map((originalName) => ({
-      originalName,
-      artists: ["Artist"],
-      durationMs: 180_000,
-      source: { provider: "netease", raw: {} }
-    })),
-    raw: {}
-  };
-
-  const report = await matchAppleMusic(playlist, DEFAULT_MATCH_PREFERENCES, undefined, {
-    logger: () => {},
-    sessionFactory: async () => session
-  });
-
-  assert.equal(report.results[0].status, "matched");
-  assert.equal(report.results[0].appleMusicId, "account-winner");
-  assert.equal(report.results[1].status, "ambiguous");
-  assert.deepEqual(isrcLookups, ["WINNER"]);
-  assert.equal(closeCount, 1);
 });
 
 test("matching closes the shared session after track failures", async () => {
@@ -792,94 +732,11 @@ test("matching marks a session initialization timeout as request failed", async 
   });
 });
 
-test("artwork comparison failure preserves an ambiguous metadata decision", async () => {
-  const playlist: NormalizedPlaylist = {
-    provider: "qq",
-    id: "failed-artwork",
-    tracks: [
-      {
-        originalName: "Song",
-        artists: ["Artist"],
-        durationMs: 180_000,
-        albumCoverUrl: cover("red"),
-        source: { provider: "qq", raw: {} }
-      }
-    ],
-    raw: {}
-  };
-  const session = fakeSession({
-    search: async () => [song("one", "Song", "Artist"), song("two", "Song", "Artist")]
-  });
-
-  const report = await matchAppleMusic(
-    playlist,
-    { ...DEFAULT_MATCH_PREFERENCES, storefront: "us", nativeSearch: false },
-    undefined,
-    {
-      logger: () => {},
-      sessionFactory: async () => session,
-      artworkComparatorFactory: () => ({
-        choose: async () => {
-          throw new Error("Artwork request timed out");
-        },
-        getStats: () => ({ featureComputations: 0, cacheHits: 0 }),
-        close: async () => {}
-      })
-    }
-  );
-
-  assert.equal(report.results[0].status, "ambiguous");
-  assert.equal(report.results[0].requestFailure, undefined);
-});
-
-test("manual selections resolve lazily and reuse their addable id", async () => {
-  let isrcLookups = 0;
-  const session = fakeSession({
-    songsByIsrc: async (isrc) => {
-      isrcLookups += 1;
-      return [song("account-id", "Song", "Artist", isrc)];
-    }
-  });
-  const report: AppleMatchReport = {
-    provider: "netease",
-    playlistId: "manual-bridge",
-    results: [
-      {
-        track: {
-          originalName: "Song",
-          artists: ["Artist"],
-          source: { provider: "netease", raw: {} }
-        },
-        status: "matched",
-        selectionSource: "manual",
-        selectedId: "native-id",
-        appleMusicId: "native-id",
-        candidates: [
-          {
-            id: "native-id",
-            name: "Song",
-            artistName: "Artist",
-            score: 1,
-            storefront: "jp",
-            isrc: "MANUAL"
-          }
-        ]
-      }
-    ]
-  };
-
-  assert.deepEqual(await resolveAppleMusicTrackIds(report, "us", session), ["account-id"]);
-  assert.deepEqual(await resolveAppleMusicTrackIds(report, "us", session), ["account-id"]);
-  assert.equal(isrcLookups, 1);
-  assert.equal(report.results[0].candidates?.[0].addableId, "account-id");
-});
-
-test("playlist creation bridges manual selections and creates through one session", async () => {
+test("playlist creation collects matched ids and creates through one session", async () => {
   let factoryCalls = 0;
   let closeCount = 0;
   const createdWith: string[][] = [];
   const session = fakeSession({
-    songsByIsrc: async (isrc) => [song("account-id", "Song", "Artist", isrc)],
     createPlaylist: async (_name, _description, trackIds) => {
       createdWith.push(trackIds);
       return "new-playlist";
@@ -899,16 +756,14 @@ test("playlist creation bridges manual selections and creates through one sessio
         },
         status: "matched",
         selectionSource: "manual",
-        selectedId: "native-id",
-        appleMusicId: "native-id",
+        selectedId: "song-id",
+        appleMusicId: "song-id",
         candidates: [
           {
-            id: "native-id",
+            id: "song-id",
             name: "Song",
             artistName: "Artist",
-            score: 1,
-            storefront: "jp",
-            isrc: "MANUAL"
+            score: 1
           }
         ]
       }
@@ -931,32 +786,5 @@ test("playlist creation bridges manual selections and creates through one sessio
   assert.equal(playlistId, "new-playlist");
   assert.equal(factoryCalls, 1);
   assert.equal(closeCount, 1);
-  assert.deepEqual(createdWith, [["account-id"]]);
-});
-
-test("job artwork comparator caches features by URL", async () => {
-  const red = cover("red");
-  const blue = cover("blue");
-  const comparator = createArtworkComparator();
-  const track = {
-    originalName: "Song",
-    artists: ["Artist"],
-    albumCoverUrl: red,
-    source: { provider: "qq" as const, raw: {} }
-  };
-  const candidates = [
-    { id: "blue", name: "Song", artistName: "Artist", score: 1, artworkUrl: blue },
-    { id: "red", name: "Song", artistName: "Artist", score: 1, artworkUrl: red }
-  ];
-
-  try {
-    assert.equal((await comparator.choose(track, candidates))?.candidate.id, "red");
-    assert.equal((await comparator.choose(track, candidates))?.candidate.id, "red");
-    assert.deepEqual(comparator.getStats(), {
-      featureComputations: 2,
-      cacheHits: 4
-    });
-  } finally {
-    await comparator.close();
-  }
+  assert.deepEqual(createdWith, [["song-id"]]);
 });

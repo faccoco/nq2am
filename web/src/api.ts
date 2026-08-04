@@ -7,6 +7,7 @@ import type {
   MusicProvider,
   NormalizedPlaylist,
   NormalizedTrack,
+  PortablePlaylistFile,
   TaskSummary,
 } from "./types";
 
@@ -65,6 +66,15 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ url, provider }),
     });
+  },
+
+  async importPlaylist(
+    file: PortablePlaylistFile,
+  ): Promise<{ key: string; playlist: NormalizedPlaylist }> {
+    return request<{ key: string; playlist: NormalizedPlaylist }>(
+      "/api/playlists/import",
+      { method: "POST", body: JSON.stringify(file) },
+    );
   },
 
   async listPlaylists(): Promise<TaskSummary[]> {

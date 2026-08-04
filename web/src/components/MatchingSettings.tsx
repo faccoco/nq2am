@@ -10,8 +10,6 @@ const DEFAULTS: MatchPreferences = {
   explicitPreference: "none",
   preferOriginalVersion: true,
   storefront: "",
-  nativeSearch: true,
-  cjkDetection: "source",
   matchConcurrency: 3,
   appleRequestIntervalMs: 150,
   appleRequestTimeoutMs: 15_000,
@@ -20,7 +18,6 @@ const DEFAULTS: MatchPreferences = {
   appleRandomPauseEnabled: true,
   appleRandomPauseMinMs: 250,
   appleRandomPauseMaxMs: 750,
-  artworkTimeoutMs: 8_000,
 };
 
 export default function MatchingSettings() {
@@ -204,43 +201,7 @@ export default function MatchingSettings() {
             {t("matching.preferOriginal")}
           </FieldTitle>
         </label>
-        <label className="flex items-center gap-2 text-sm text-slate-300">
-          <input
-            type="checkbox"
-            className="h-4 w-4 accent-indigo-500"
-            checked={prefs.nativeSearch}
-            onChange={(e) => patch({ nativeSearch: e.target.checked })}
-          />
-          <FieldTitle tooltip={t("matching.nativeSearchTooltip")}>
-            {t("matching.nativeSearch")}
-          </FieldTitle>
-        </label>
-        <span className="ml-6 text-xs text-slate-500">
-          {t("matching.nativeSearchHelp")}
-        </span>
       </div>
-
-      {prefs.nativeSearch && (
-        <label className="flex max-w-sm flex-col gap-1 text-sm text-slate-300">
-          <FieldTitle tooltip={t("matching.cjk.tooltip")}>
-            {t("matching.cjk.label")}
-          </FieldTitle>
-          <select
-            value={prefs.cjkDetection}
-            onChange={(e) =>
-              patch({
-                cjkDetection: e.target
-                  .value as MatchPreferences["cjkDetection"],
-              })
-            }
-            className="rounded-md border border-slate-600 bg-slate-900 px-3 py-2 text-slate-100 focus:border-indigo-500 focus:outline-none"
-          >
-            <option value="source">{t("matching.cjk.options.source")}</option>
-            <option value="text">{t("matching.cjk.options.text")}</option>
-          </select>
-          <span className="text-xs text-slate-500">{t("matching.cjk.help")}</span>
-        </label>
-      )}
 
       <section className="space-y-4 border-t border-slate-700 pt-4">
         <div>
@@ -303,17 +264,6 @@ export default function MatchingSettings() {
             step={250}
             unit="ms"
             onChange={(value) => patch({ appleRetryBaseDelayMs: value })}
-          />
-          <NumberPreference
-            label={t("matching.performance.artworkTimeout.label")}
-            tooltip={t("matching.performance.artworkTimeout.tooltip")}
-            help={t("matching.performance.artworkTimeout.help")}
-            value={prefs.artworkTimeoutMs}
-            min={1_000}
-            max={120_000}
-            step={1_000}
-            unit="ms"
-            onChange={(value) => patch({ artworkTimeoutMs: value })}
           />
         </div>
 

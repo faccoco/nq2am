@@ -41,9 +41,6 @@ export default function ReviewCard({
 }: Props) {
   const { t } = useTranslation("match");
   const artistLine = r.track.artists.join(", ");
-  // True when any candidate was fetched from a non-account (native) region and
-  // bridged via ISRC — the library will display it using the account region.
-  const bridged = (r.candidates ?? []).some((c) => c.addableId && c.addableId !== c.id);
   const selectedCandidate = (r.candidates ?? []).find((c) => c.id === r.selectedId);
   const selectedLabel = selectedCandidate
     ? [selectedCandidate.name, selectedCandidate.albumName].filter(Boolean).join(" · ")
@@ -167,9 +164,6 @@ export default function ReviewCard({
         </div>
       ) : (
         <div className="space-y-2">
-          {bridged && (
-            <p className="text-xs text-slate-500">{t("nativeNotice")}</p>
-          )}
           {(r.candidates ?? []).map((c) => (
             <CandidateCard
               key={c.id}

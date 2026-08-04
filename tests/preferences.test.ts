@@ -49,7 +49,6 @@ test("legacy preferences receive configurable Apple request settings", async () 
   assert.equal(prefs.appleRequestIntervalMs, DEFAULT_MATCH_PREFERENCES.appleRequestIntervalMs);
   assert.equal(prefs.appleRequestTimeoutMs, DEFAULT_MATCH_PREFERENCES.appleRequestTimeoutMs);
   assert.equal(prefs.appleRandomPauseEnabled, true);
-  assert.equal(prefs.artworkTimeoutMs, DEFAULT_MATCH_PREFERENCES.artworkTimeoutMs);
 });
 
 test("an explicitly disabled random pause remains disabled", async () => {

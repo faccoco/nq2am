@@ -1,5 +1,6 @@
+export type { PortablePlaylistFile, PortableTrack } from "./adapters/file.js";
+export { normalizePlaylistFile, toPortablePlaylist, toPortableTrack } from "./adapters/file.js";
 export { normalizeNeteasePlaylist } from "./adapters/netease.js";
-
 export { normalizeQqPlaylist } from "./adapters/qq.js";
 export type {
   AppleApiRequestMetric,
@@ -11,14 +12,12 @@ export {
   appleCreatePlaylist,
   appleGetStorefront,
   appleSearch,
-  appleSongsByIsrc,
   createAppleApiSession
 } from "./apple/api.js";
 export type { AppleMatchExecutionOptions, AppleMatchLogEvent } from "./apple/matcher.js";
 export {
   createAppleMusicPlaylist,
   createAppleMusicPlaylistFromReport,
-  detectStorefrontForTrack,
   matchAppleMusic,
   refreshAppleMatchReportCandidates,
   resolveAppleMusicTrackIds,

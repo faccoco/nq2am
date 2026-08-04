@@ -66,10 +66,6 @@ function validate(input: unknown): MatchPreferences {
   if (explicit !== "explicit" && explicit !== "clean" && explicit !== "none") {
     throw new PreferencesValidationError("explicitPreference must be explicit, clean, or none");
   }
-  const cjk = p.cjkDetection ?? d.cjkDetection;
-  if (cjk !== "source" && cjk !== "text") {
-    throw new PreferencesValidationError("cjkDetection must be source or text");
-  }
   if (p.storefront !== undefined && typeof p.storefront !== "string") {
     throw new PreferencesValidationError("storefront must be a string");
   }
@@ -87,8 +83,6 @@ function validate(input: unknown): MatchPreferences {
     explicitPreference: explicit,
     preferOriginalVersion: readBoolean(p, "preferOriginalVersion", d.preferOriginalVersion),
     storefront: (p.storefront ?? d.storefront).trim().toLowerCase(),
-    nativeSearch: readBoolean(p, "nativeSearch", d.nativeSearch),
-    cjkDetection: cjk,
     matchConcurrency: readNumber(p, "matchConcurrency", d.matchConcurrency, 1, 10, true),
     appleRequestIntervalMs: readNumber(p, "appleRequestIntervalMs", d.appleRequestIntervalMs, 0, 10_000, true),
     appleRequestTimeoutMs: readNumber(p, "appleRequestTimeoutMs", d.appleRequestTimeoutMs, 1_000, 120_000, true),
@@ -96,8 +90,7 @@ function validate(input: unknown): MatchPreferences {
     appleRetryBaseDelayMs: readNumber(p, "appleRetryBaseDelayMs", d.appleRetryBaseDelayMs, 0, 60_000, true),
     appleRandomPauseEnabled: readBoolean(p, "appleRandomPauseEnabled", d.appleRandomPauseEnabled),
     appleRandomPauseMinMs: randomPauseMinMs,
-    appleRandomPauseMaxMs: randomPauseMaxMs,
-    artworkTimeoutMs: readNumber(p, "artworkTimeoutMs", d.artworkTimeoutMs, 1_000, 120_000, true)
+    appleRandomPauseMaxMs: randomPauseMaxMs
   };
 }
 

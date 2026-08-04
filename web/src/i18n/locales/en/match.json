@@ -50,7 +50,6 @@
     "appleIdReason": "Apple ID / Reason"
   },
   "manual": "(manual)",
-  "nativeNotice": "Found in the track's native region. It will be added correctly, but your library shows it using your account region's language.",
   "notFoundNoReason": "No Apple Music candidate was found.",
   "requestFailedNoReason": "The Apple Music request failed before matching completed.",
   "retry": {
@@ -73,6 +72,8 @@
     "noMatch": "Marked no match",
     "show": "Show options"
   },
+  "exportUnmatched": "Export unmatched ({{count}})",
+  "exportUnmatchedTitle": "Download the tracks that did not match as a portable .json file",
   "createPlaylist": "Create Apple Music Playlist",
   "creating": "Creating…",
   "createdMessage": "Apple Music playlist created{{idSuffix}}.",

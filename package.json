@@ -23,7 +23,6 @@
     "lint": "biome check src server tests",
     "lint:fix": "biome check --write src server tests",
     "test": "pnpm run build && node --test dist/tests/*.test.js",
-    "test:real": "pnpm run build && node --test dist/tests/real-songs.test.js",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "keywords": [

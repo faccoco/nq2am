@@ -69,7 +69,6 @@ export type AppleApiSessionOptions = {
 
 export type AppleApiSession = {
   search(term: string, storefront: string): Promise<AppleSong[]>;
-  songsByIsrc(isrc: string, storefront: string): Promise<AppleSong[]>;
   getStorefront(): Promise<string>;
   createPlaylist(name: string, description: string, trackIds: string[]): Promise<string>;
   getStats(): AppleApiSessionStats;
@@ -355,12 +354,6 @@ export class PlaywrightAppleApiSession implements AppleApiSession {
     return result.results?.songs?.data ?? [];
   }
 
-  async songsByIsrc(isrc: string, storefront: string): Promise<AppleSong[]> {
-    const params = new URLSearchParams({ "filter[isrc]": isrc, limit: "10" });
-    const result = await this.requestJson<{ data?: AppleSong[] }>("isrc", `/v1/catalog/${storefront}/songs?${params}`);
-    return result.data ?? [];
-  }
-
   async getStorefront(): Promise<string> {
     const result = await this.requestJson<StorefrontResponse>("storefront", "/v1/me/storefront");
     return result.data?.[0]?.id ?? "us";
@@ -615,10 +608,6 @@ async function withOneShotSession<T>(operation: (session: AppleApiSession) => Pr
 
 export async function appleSearch(term: string, storefront: string): Promise<AppleSong[]> {
   return withOneShotSession((session) => session.search(term, storefront));
-}
-
-export async function appleSongsByIsrc(isrc: string, storefront: string): Promise<AppleSong[]> {
-  return withOneShotSession((session) => session.songsByIsrc(isrc, storefront));
 }
 
 export async function appleGetStorefront(): Promise<string> {
