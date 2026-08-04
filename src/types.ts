@@ -29,122 +29,7 @@ export type NormalizedPlaylist = {
   raw: unknown;
 };
 
-export type AppleMatchStatus =
-  | "not_implemented"
-  | "matched"
-  | "not_found"
-  | "score_rejected"
-  | "ambiguous"
-  | "request_failed";
-
-/** Identifier for the recording-first score model. */
-export const CURRENT_SCORING_VERSION = 2 as const;
-export type AppleScoringVersion = typeof CURRENT_SCORING_VERSION;
-
-export type AppleQueryVariant =
-  | "original_primary_artist"
-  | "base_primary_artist"
-  | "base_additional_artist"
-  | "base_album"
-  | "base_title";
-
-export type AppleCandidateProvenance = {
-  queryId: string;
-  variant: AppleQueryVariant;
-  term: string;
-  storefront: string;
-  rank: number;
-};
-
-export type AppleRetrievalQueryDiagnostic = {
-  queryId: string;
-  variant: AppleQueryVariant;
-  term: string;
-  storefront: string;
-  required: boolean;
-  status: "success" | "failed";
-  candidateCount: number;
-  fromCache?: boolean;
-  reason?: string;
-};
-
-export type AppleRetrievalDiagnostics = {
-  outcome: "success" | "failed";
-  queryBudget: number;
-  queries: AppleRetrievalQueryDiagnostic[];
-  uniqueCandidateCount: number;
-  earlyStopped: boolean;
-  cacheHits: number;
-};
-
-export type ParsedRecordingMetadata = {
-  baseTitle: string;
-  featuredArtists: string[];
-  recordingFacets: string[];
-  structuralFacets: string[];
-  releaseFacets: string[];
-};
-
-export type AppleArtistPairEvidence = {
-  source: string;
-  candidate: string;
-  similarity: number;
-  alias: boolean;
-};
-
-export type AppleArtistEvidence = {
-  primaryPair: number;
-  candidateCoverage: number;
-  sourceCoverage: number;
-  pairs: AppleArtistPairEvidence[];
-  aliases: string[];
-  hasPrimaryRelationship: boolean;
-};
-
-export type AppleCandidateEvidence = {
-  parsedSource: ParsedRecordingMetadata;
-  parsedCandidate: ParsedRecordingMetadata;
-  baseTitleSimilarity: number;
-  titleSimilarity: number;
-  artist: AppleArtistEvidence;
-  durationSimilarity: number;
-  versionCompatibility: number;
-  albumSimilarity: number;
-  albumBonus: number;
-  artworkBonus: number;
-  identityConfidence: number;
-  confidence: number;
-  automaticEligible: boolean;
-  deterministicIdentity: boolean;
-  incompatibilities: string[];
-  decisiveEvidence: string[];
-};
-
-export type AppleRecordingGroupEvidence = {
-  id: string;
-  candidateIds: string[];
-  isrc?: string;
-  confidence: number;
-  identityConfidence: number;
-  automaticEligible: boolean;
-  deterministicIdentity: boolean;
-  strongestCandidateId: string;
-  selectedReleaseId?: string;
-  decisiveEvidence: string[];
-  conflicts: string[];
-};
-
-export type AppleDecisionDiagnostics = {
-  scoringVersion: AppleScoringVersion;
-  bestGroupConfidence?: number;
-  runnerUpGroupConfidence?: number;
-  margin?: number;
-  automaticThreshold: number;
-  reviewThreshold: number;
-  requiredMargin: number;
-  rejectionCause?: string;
-  decisiveEvidence: string[];
-};
+export type AppleMatchStatus = "not_implemented" | "matched" | "not_found" | "ambiguous" | "request_failed";
 
 export type AppleContentRating = "explicit" | "clean";
 
@@ -173,8 +58,6 @@ export type AppleScoreBreakdown = {
     duration: number;
     version: number;
   };
-  /** Recording-first evidence used by scoring version 2. */
-  evidence?: AppleCandidateEvidence;
 };
 
 /** A single Apple Music catalog candidate for a normalized track. */
@@ -201,12 +84,6 @@ export type AppleCandidate = {
   addableId?: string;
   /** Storefront this candidate's metadata was fetched from (e.g. "jp"). */
   storefront?: string;
-  /** Every bounded retrieval pass that returned this catalog entry. */
-  provenance?: AppleCandidateProvenance[];
-  /** Structured, explainable recording identity evidence. */
-  evidence?: AppleCandidateEvidence;
-  /** Recording group assigned before ambiguity evaluation. */
-  recordingGroupId?: string;
 };
 
 export type AppleMatchResult = {
@@ -221,17 +98,12 @@ export type AppleMatchResult = {
   appleMusicUrl?: string;
   reason?: string;
   requestFailure?: AppleRequestFailure;
-  scoringVersion?: AppleScoringVersion;
-  retrieval?: AppleRetrievalDiagnostics;
-  recordingGroups?: AppleRecordingGroupEvidence[];
-  decision?: AppleDecisionDiagnostics;
 };
 
 export type AppleMatchReport = {
   provider: MusicProvider;
   playlistId?: string;
   playlistName?: string;
-  scoringVersion?: AppleScoringVersion;
   results: AppleMatchResult[];
 };
 
@@ -240,13 +112,9 @@ export type AppleMatchReport = {
  * through the Settings UI — never hand-written.
  */
 export type MatchPreferences = {
-  /** Score and decision model associated with all numeric controls below. */
-  scoringVersion: AppleScoringVersion;
-  /** Minimum recording-group confidence for an automatic match (0–1). */
+  /** Minimum score for an automatic match (0–1). */
   threshold: number;
-  /** Minimum recording-group confidence retained for manual review (0–1). */
-  reviewThreshold: number;
-  /** Required best-group minus runner-up-group margin for automatic selection. */
+  /** If best − secondBest < this, the match is ambiguous. */
   ambiguousGap: number;
   /** Favor candidates whose duration is closest to the source track. */
   preferDurationMatch: boolean;
@@ -288,10 +156,8 @@ export type MatchPreferences = {
 };
 
 export const DEFAULT_MATCH_PREFERENCES: MatchPreferences = {
-  scoringVersion: CURRENT_SCORING_VERSION,
-  threshold: 0.86,
-  reviewThreshold: 0.62,
-  ambiguousGap: 0.08,
+  threshold: 0.7,
+  ambiguousGap: 0.1,
   preferDurationMatch: true,
   explicitPreference: "none",
   preferOriginalVersion: true,

@@ -15,7 +15,6 @@
   "status": {
     "matched": "已匹配",
     "not_found": "未找到",
-    "score_rejected": "评分未通过",
     "ambiguous": "存在歧义",
     "request_failed": "请求失败",
     "not_implemented": "未实现"
@@ -24,7 +23,6 @@
     "total": "总计",
     "matched": "已匹配",
     "not_found": "未找到",
-    "score_rejected": "评分未通过",
     "ambiguous": "存在歧义",
     "request_failed": "请求失败",
     "pending": "待处理"
@@ -32,13 +30,11 @@
   "tabs": {
     "all": "全部（{{count}}）",
     "ambiguous": "存在歧义（{{count}}）",
-    "score_rejected": "评分未通过（{{count}}）",
     "request_failed": "请求失败（{{count}}）",
     "not_found": "未找到（{{count}}）",
     "matched": "已匹配（{{count}}）"
   },
   "emptyAmbiguous": "没有存在歧义的歌曲。",
-  "emptyScoreRejected": "没有低于复核阈值的候选歌曲。",
   "emptyRequestFailed": "没有请求失败的歌曲。",
   "emptyNotFound": "没有未找到的歌曲。",
   "reselect": "重新选择",
@@ -66,7 +62,6 @@
     "scopes": {
       "request_failed": "请求失败（{{count}}）",
       "not_found": "未找到（{{count}}）",
-      "score_rejected": "评分未通过（{{count}}）",
       "ambiguous": "存在歧义（{{count}}）",
       "selected": "已选择（{{count}}）",
       "all": "全部（{{count}}）"

@@ -15,7 +15,6 @@
   "status": {
     "matched": "Matched",
     "not_found": "Not found",
-    "score_rejected": "Score rejected",
     "ambiguous": "Ambiguous",
     "request_failed": "Request failed",
     "not_implemented": "Not implemented"
@@ -24,7 +23,6 @@
     "total": "Total",
     "matched": "Matched",
     "not_found": "Not found",
-    "score_rejected": "Score rejected",
     "ambiguous": "Ambiguous",
     "request_failed": "Request failed",
     "pending": "Pending"
@@ -32,13 +30,11 @@
   "tabs": {
     "all": "All ({{count}})",
     "ambiguous": "Ambiguous ({{count}})",
-    "score_rejected": "Score rejected ({{count}})",
     "request_failed": "Request failed ({{count}})",
     "not_found": "Not found ({{count}})",
     "matched": "Matched ({{count}})"
   },
   "emptyAmbiguous": "No ambiguous tracks.",
-  "emptyScoreRejected": "No tracks with candidates below the review threshold.",
   "emptyRequestFailed": "No tracks with request failures.",
   "emptyNotFound": "No not-found tracks.",
   "reselect": "Reselect",
@@ -66,7 +62,6 @@
     "scopes": {
       "request_failed": "Request failed ({{count}})",
       "not_found": "Not found ({{count}})",
-      "score_rejected": "Score rejected ({{count}})",
       "ambiguous": "Ambiguous ({{count}})",
       "selected": "Selected ({{count}})",
       "all": "All ({{count}})"

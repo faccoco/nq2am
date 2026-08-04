@@ -135,7 +135,7 @@ test("match route accepts null appleMusicId to mark a track as no match", async 
   assert.equal(res.statusCode, 200);
   assert.deepEqual(res.jsonBody, {
     track: playlist.tracks[0],
-    status: "score_rejected",
+    status: "not_found",
     selectedId: undefined,
     selectionSource: "manual",
     appleMusicId: undefined,

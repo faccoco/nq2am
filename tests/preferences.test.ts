@@ -40,30 +40,16 @@ async function invokePutPreferences(body: unknown) {
   return { statusCode, jsonBody };
 }
 
-test("legacy preferences reset score controls and preserve Apple request defaults", async () => {
+test("legacy preferences receive configurable Apple request settings", async () => {
   const { setPreferences } = await import("../server/preferences.js");
-  const prefs = await setPreferences({ threshold: 0.8, matchConcurrency: 5, storefront: "JP" });
+  const prefs = await setPreferences({ threshold: 0.8 });
 
-  assert.equal(prefs.scoringVersion, 2);
-  assert.equal(prefs.threshold, DEFAULT_MATCH_PREFERENCES.threshold);
-  assert.equal(prefs.reviewThreshold, DEFAULT_MATCH_PREFERENCES.reviewThreshold);
-  assert.equal(prefs.ambiguousGap, DEFAULT_MATCH_PREFERENCES.ambiguousGap);
-  assert.equal(prefs.matchConcurrency, 5);
-  assert.equal(prefs.storefront, "jp");
+  assert.equal(prefs.threshold, 0.8);
+  assert.equal(prefs.matchConcurrency, DEFAULT_MATCH_PREFERENCES.matchConcurrency);
   assert.equal(prefs.appleRequestIntervalMs, DEFAULT_MATCH_PREFERENCES.appleRequestIntervalMs);
   assert.equal(prefs.appleRequestTimeoutMs, DEFAULT_MATCH_PREFERENCES.appleRequestTimeoutMs);
   assert.equal(prefs.appleRandomPauseEnabled, true);
   assert.equal(prefs.artworkTimeoutMs, DEFAULT_MATCH_PREFERENCES.artworkTimeoutMs);
-});
-
-test("unsupported scoring versions are rejected without modifying storage", async () => {
-  const { getPreferences, PreferencesValidationError, setPreferences } = await import("../server/preferences.js");
-  const current = await setPreferences({ ...DEFAULT_MATCH_PREFERENCES, threshold: 0.9 });
-  const storedBefore = readFileSync(join(dataDir, "preferences.json"), "utf8");
-
-  await assert.rejects(setPreferences({ ...current, scoringVersion: 99 }), PreferencesValidationError);
-  assert.deepEqual(await getPreferences(), current);
-  assert.equal(readFileSync(join(dataDir, "preferences.json"), "utf8"), storedBefore);
 });
 
 test("an explicitly disabled random pause remains disabled", async () => {

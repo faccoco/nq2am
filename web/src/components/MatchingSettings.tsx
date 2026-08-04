@@ -4,10 +4,8 @@ import { api } from "../api";
 import type { MatchPreferences } from "../types";
 
 const DEFAULTS: MatchPreferences = {
-  scoringVersion: 2,
-  threshold: 0.86,
-  reviewThreshold: 0.62,
-  ambiguousGap: 0.08,
+  threshold: 0.7,
+  ambiguousGap: 0.1,
   preferDurationMatch: true,
   explicitPreference: "none",
   preferOriginalVersion: true,
@@ -84,12 +82,7 @@ export default function MatchingSettings() {
   return (
     <div className="space-y-4 rounded-lg border border-slate-700 bg-slate-800 p-5">
       <div>
-        <div className="flex flex-wrap items-center gap-2">
-          <h2 className="text-lg font-semibold text-white">{t("matching.title")}</h2>
-          <span className="rounded bg-slate-700 px-2 py-0.5 text-xs text-slate-300">
-            {t("matching.scoringVersion", { version: prefs.scoringVersion })}
-          </span>
-        </div>
+        <h2 className="text-lg font-semibold text-white">{t("matching.title")}</h2>
         <p className="mt-1 text-sm text-slate-400">
           {t("matching.description")}
         </p>
@@ -115,35 +108,11 @@ export default function MatchingSettings() {
             max={1}
             step={0.05}
             value={prefs.threshold}
-            onChange={(e) => {
-              const threshold = Number(e.target.value);
-              patch({ threshold, reviewThreshold: Math.min(prefs.reviewThreshold, threshold) });
-            }}
+            onChange={(e) => patch({ threshold: Number(e.target.value) })}
             className="accent-indigo-500"
           />
           <span className="text-xs text-slate-500">
             {t("matching.threshold.help")}
-          </span>
-        </label>
-
-        <label className="flex flex-col gap-1 text-sm text-slate-300">
-          <FieldTitle tooltip={t("matching.reviewThreshold.tooltip")}>
-            {t("matching.reviewThreshold.label")} {" "}
-            <span className="font-mono text-slate-100">
-              {prefs.reviewThreshold.toFixed(2)}
-            </span>
-          </FieldTitle>
-          <input
-            type="range"
-            min={0}
-            max={prefs.threshold}
-            step={0.02}
-            value={prefs.reviewThreshold}
-            onChange={(e) => patch({ reviewThreshold: Number(e.target.value) })}
-            className="accent-indigo-500"
-          />
-          <span className="text-xs text-slate-500">
-            {t("matching.reviewThreshold.help")}
           </span>
         </label>
 

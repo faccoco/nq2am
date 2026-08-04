@@ -236,8 +236,8 @@ test("Apple Music matcher rejects unwanted off-vocal versions below threshold", 
     { ...DEFAULT_MATCH_PREFERENCES, threshold: 0.8 }
   );
 
-  assert.equal(result.status, "score_rejected");
-  assert.match(result.reason ?? "", /below review threshold/);
+  assert.equal(result.status, "not_found");
+  assert.match(result.reason ?? "", /below threshold/);
 });
 
 test("Apple Music matcher allows requested off-vocal versions", async () => {
@@ -422,7 +422,7 @@ test("Apple Music matcher auto-selects indistinguishable duplicate candidates", 
   );
 
   assert.equal(result.status, "matched");
-  assert.equal(result.selectedId, "new-catalog");
+  assert.equal(result.selectedId, "old-catalog");
   assert.match(result.reason ?? "", /duplicate/i);
 });
 
@@ -457,7 +457,7 @@ test("Apple Music matcher auto-selects source-album duplicates with refreshed ar
   );
 
   assert.equal(result.status, "matched");
-  assert.equal(result.selectedId, "new-catalog");
+  assert.equal(result.selectedId, "old-catalog");
   assert.match(result.reason ?? "", /duplicate/i);
 });
 
@@ -524,7 +524,7 @@ test("Apple Music matcher uses cover structure when average colors are misleadin
   assert.match(result.reason ?? "", /album cover similarity/);
 });
 
-test("Apple Music matcher groups duplicate releases when cover similarity is weak", async () => {
+test("Apple Music matcher keeps ambiguity when cover similarity margin is weak", async () => {
   const { matchSingleTrack } = await loadMatcherModule();
   const result = await matchSingleTrack(
     {
@@ -538,8 +538,8 @@ test("Apple Music matcher groups duplicate releases when cover similarity is wea
     tiePrefs()
   );
 
-  assert.equal(result.status, "matched");
-  assert.equal(result.recordingGroups?.length, 1);
+  assert.equal(result.status, "ambiguous");
+  assert.match(result.reason ?? "", /cover/i);
 });
 
 test("Apple Music matcher uses exact album match for near-tied candidates", async () => {
@@ -564,7 +564,7 @@ test("Apple Music matcher uses exact album match for near-tied candidates", asyn
   assert.match(result.reason ?? "", /album match/);
 });
 
-test("Apple Music matcher groups duplicate releases when cover art is missing", async () => {
+test("Apple Music matcher keeps ambiguity when cover art is missing", async () => {
   const { matchSingleTrack } = await loadMatcherModule();
   const result = await matchSingleTrack(
     {
@@ -577,8 +577,8 @@ test("Apple Music matcher groups duplicate releases when cover art is missing", 
     tiePrefs()
   );
 
-  assert.equal(result.status, "matched");
-  assert.equal(result.recordingGroups?.length, 1);
+  assert.equal(result.status, "ambiguous");
+  assert.equal(result.selectedId, undefined);
 });
 
 test("Apple Music matcher prefers the closest album across every candidate above threshold", async () => {
@@ -770,10 +770,10 @@ test("Apple Music retry replaces request failures with fresh semantic results", 
 
   assert.deepEqual(
     report.results.map((result) => result.status),
-    ["matched", "matched", "not_found", "request_failed"]
+    ["matched", "ambiguous", "not_found", "request_failed"]
   );
   assert.equal(report.results[0].requestFailure, undefined);
-  assert.match(report.results[2].reason ?? "", /No results from Apple Music search/);
+  assert.equal(report.results[2].reason, "No results from Apple Music search");
   assert.deepEqual(report.results[3].requestFailure, { kind: "network", operation: "search" });
 });
 
@@ -858,6 +858,6 @@ test("Apple Music report refresh upgrades stale ambiguous candidates", async () 
   assert.equal(report.results[0].selectedId, "single");
   assert.equal(report.results[0].candidates?.[0]?.scoreBreakdown?.fields.album, 1);
   assert.equal(report.results[1].status, "matched");
-  assert.equal(report.results[1].selectedId, "new-catalog");
+  assert.equal(report.results[1].selectedId, "old-catalog");
   assert.match(report.results[1].reason ?? "", /duplicate/i);
 });

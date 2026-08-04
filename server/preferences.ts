@@ -1,7 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { getDataDir } from "../src/fetchers/auth.js";
-import { CURRENT_SCORING_VERSION, DEFAULT_MATCH_PREFERENCES, type MatchPreferences } from "../src/types.js";
+import { DEFAULT_MATCH_PREFERENCES, type MatchPreferences } from "../src/types.js";
 
 const STORE_PATH = join(getDataDir(), "preferences.json");
 
@@ -14,10 +14,8 @@ export class PreferencesValidationError extends Error {
   }
 }
 
-type PreferenceInput = Partial<Record<keyof MatchPreferences, unknown>>;
-
 function readNumber(
-  input: PreferenceInput,
+  input: Partial<MatchPreferences>,
   key: keyof MatchPreferences,
   fallback: number,
   min: number,
@@ -25,7 +23,9 @@ function readNumber(
   integer = false
 ): number {
   const value = input[key];
-  if (value === undefined) return fallback;
+  if (value === undefined) {
+    return fallback;
+  }
   if (typeof value !== "number" || !Number.isFinite(value)) {
     throw new PreferencesValidationError(`${key} must be a finite number`);
   }
@@ -38,28 +38,29 @@ function readNumber(
   return value;
 }
 
-function readBoolean(input: PreferenceInput, key: keyof MatchPreferences, fallback: boolean): boolean {
+function readBoolean(input: Partial<MatchPreferences>, key: keyof MatchPreferences, fallback: boolean): boolean {
   const value = input[key];
-  if (value === undefined) return fallback;
-  if (typeof value !== "boolean") throw new PreferencesValidationError(`${key} must be a boolean`);
+  if (value === undefined) {
+    return fallback;
+  }
+  if (typeof value !== "boolean") {
+    throw new PreferencesValidationError(`${key} must be a boolean`);
+  }
   return value;
 }
 
-function validate(input: unknown): { preferences: MatchPreferences; migrated: boolean } {
+function validate(input: unknown): MatchPreferences {
   if (typeof input !== "object" || input === null || Array.isArray(input)) {
     throw new PreferencesValidationError("Preferences must be an object");
   }
 
-  const p = input as PreferenceInput;
+  const p = input as Partial<MatchPreferences>;
   const d = DEFAULT_MATCH_PREFERENCES;
   const knownKeys = new Set(Object.keys(d));
   for (const key of Object.keys(p)) {
-    if (!knownKeys.has(key)) throw new PreferencesValidationError(`Unknown preference: ${key}`);
-  }
-
-  const legacy = p.scoringVersion === undefined;
-  if (!legacy && p.scoringVersion !== CURRENT_SCORING_VERSION) {
-    throw new PreferencesValidationError(`Unsupported scoringVersion: ${String(p.scoringVersion)}`);
+    if (!knownKeys.has(key)) {
+      throw new PreferencesValidationError(`Unknown preference: ${key}`);
+    }
   }
   const explicit = p.explicitPreference ?? d.explicitPreference;
   if (explicit !== "explicit" && explicit !== "clean" && explicit !== "none") {
@@ -79,53 +80,32 @@ function validate(input: unknown): { preferences: MatchPreferences; migrated: bo
     throw new PreferencesValidationError("appleRandomPauseMinMs must be less than or equal to appleRandomPauseMaxMs");
   }
 
-  // Legacy score values are deliberately ignored: v1 and v2 distributions are
-  // not linearly compatible. Non-scoring settings remain intact.
-  const threshold = legacy ? d.threshold : readNumber(p, "threshold", d.threshold, 0, 1);
-  const reviewThreshold = legacy ? d.reviewThreshold : readNumber(p, "reviewThreshold", d.reviewThreshold, 0, 1);
-  const ambiguousGap = legacy ? d.ambiguousGap : readNumber(p, "ambiguousGap", d.ambiguousGap, 0, 1);
-  if (reviewThreshold > threshold) {
-    throw new PreferencesValidationError("reviewThreshold must be less than or equal to threshold");
-  }
-
   return {
-    migrated: legacy,
-    preferences: {
-      scoringVersion: CURRENT_SCORING_VERSION,
-      threshold,
-      reviewThreshold,
-      ambiguousGap,
-      preferDurationMatch: readBoolean(p, "preferDurationMatch", d.preferDurationMatch),
-      explicitPreference: explicit,
-      preferOriginalVersion: readBoolean(p, "preferOriginalVersion", d.preferOriginalVersion),
-      storefront: ((p.storefront as string | undefined) ?? d.storefront).trim().toLowerCase(),
-      nativeSearch: readBoolean(p, "nativeSearch", d.nativeSearch),
-      cjkDetection: cjk,
-      matchConcurrency: readNumber(p, "matchConcurrency", d.matchConcurrency, 1, 10, true),
-      appleRequestIntervalMs: readNumber(p, "appleRequestIntervalMs", d.appleRequestIntervalMs, 0, 10_000, true),
-      appleRequestTimeoutMs: readNumber(p, "appleRequestTimeoutMs", d.appleRequestTimeoutMs, 1_000, 120_000, true),
-      appleMaxAttempts: readNumber(p, "appleMaxAttempts", d.appleMaxAttempts, 1, 10, true),
-      appleRetryBaseDelayMs: readNumber(p, "appleRetryBaseDelayMs", d.appleRetryBaseDelayMs, 0, 60_000, true),
-      appleRandomPauseEnabled: readBoolean(p, "appleRandomPauseEnabled", d.appleRandomPauseEnabled),
-      appleRandomPauseMinMs: randomPauseMinMs,
-      appleRandomPauseMaxMs: randomPauseMaxMs,
-      artworkTimeoutMs: readNumber(p, "artworkTimeoutMs", d.artworkTimeoutMs, 1_000, 120_000, true)
-    }
+    threshold: readNumber(p, "threshold", d.threshold, 0, 1),
+    ambiguousGap: readNumber(p, "ambiguousGap", d.ambiguousGap, 0, 1),
+    preferDurationMatch: readBoolean(p, "preferDurationMatch", d.preferDurationMatch),
+    explicitPreference: explicit,
+    preferOriginalVersion: readBoolean(p, "preferOriginalVersion", d.preferOriginalVersion),
+    storefront: (p.storefront ?? d.storefront).trim().toLowerCase(),
+    nativeSearch: readBoolean(p, "nativeSearch", d.nativeSearch),
+    cjkDetection: cjk,
+    matchConcurrency: readNumber(p, "matchConcurrency", d.matchConcurrency, 1, 10, true),
+    appleRequestIntervalMs: readNumber(p, "appleRequestIntervalMs", d.appleRequestIntervalMs, 0, 10_000, true),
+    appleRequestTimeoutMs: readNumber(p, "appleRequestTimeoutMs", d.appleRequestTimeoutMs, 1_000, 120_000, true),
+    appleMaxAttempts: readNumber(p, "appleMaxAttempts", d.appleMaxAttempts, 1, 10, true),
+    appleRetryBaseDelayMs: readNumber(p, "appleRetryBaseDelayMs", d.appleRetryBaseDelayMs, 0, 60_000, true),
+    appleRandomPauseEnabled: readBoolean(p, "appleRandomPauseEnabled", d.appleRandomPauseEnabled),
+    appleRandomPauseMinMs: randomPauseMinMs,
+    appleRandomPauseMaxMs: randomPauseMaxMs,
+    artworkTimeoutMs: readNumber(p, "artworkTimeoutMs", d.artworkTimeoutMs, 1_000, 120_000, true)
   };
-}
-
-async function persistPreferences(preferences: MatchPreferences): Promise<void> {
-  await mkdir(getDataDir(), { recursive: true });
-  await writeFile(STORE_PATH, JSON.stringify(preferences, null, 2), "utf8");
 }
 
 export async function getPreferences(): Promise<MatchPreferences> {
   if (cached) return cached;
   try {
     const raw = await readFile(STORE_PATH, "utf8");
-    const { preferences, migrated } = validate(JSON.parse(raw));
-    cached = preferences;
-    if (migrated) await persistPreferences(preferences);
+    cached = validate(JSON.parse(raw));
   } catch {
     cached = { ...DEFAULT_MATCH_PREFERENCES };
   }
@@ -133,8 +113,9 @@ export async function getPreferences(): Promise<MatchPreferences> {
 }
 
 export async function setPreferences(input: unknown): Promise<MatchPreferences> {
-  const { preferences: next } = validate(input);
-  await persistPreferences(next);
+  const next = validate(input);
+  await mkdir(getDataDir(), { recursive: true });
+  await writeFile(STORE_PATH, JSON.stringify(next, null, 2), "utf8");
   cached = next;
   return next;
 }
