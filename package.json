@@ -19,11 +19,12 @@
     "dev:server": "NQ2AM_NO_OPEN=1 tsx watch server/index.ts",
     "dev:web": "cd web && pnpm exec vite --open",
     "serve": "pnpm run build:all && node dist/server/index.js",
-    "fmt": "biome format --write src server tests",
-    "lint": "biome check src server tests",
-    "lint:fix": "biome check --write src server tests",
+    "fmt": "biome format --write src server tests scripts",
+    "lint": "biome check src server tests scripts",
+    "lint:fix": "biome check --write src server tests scripts",
     "test": "pnpm run build && node --test dist/tests/*.test.js",
     "test:real": "pnpm run build && node --test dist/tests/real-songs.test.js",
+    "replay:apple": "tsx scripts/apple-match-replay.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "keywords": [

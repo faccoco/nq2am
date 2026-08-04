@@ -56,7 +56,7 @@ test("legacy report normalization is selective and idempotent", () => {
   assert.notEqual(normalized, report);
   assert.deepEqual(
     normalized.results.map((result) => result.status),
-    ["request_failed", "not_found", "not_found", "not_found", "not_found"]
+    ["request_failed", "not_found", "score_rejected", "not_found", "not_found"]
   );
   assert.equal(normalized.results[0].reason, report.results[0].reason);
   assert.deepEqual(normalized.results[0].requestFailure, { kind: "http", status: 503 });
@@ -107,7 +107,7 @@ test("task loading persists legacy request-failure migration", async () => {
   const task = await getTask("legacy");
   assert.deepEqual(
     task?.matchReport?.results.map((result) => result.status),
-    ["request_failed", "request_failed", "request_failed", "not_found", "not_found", "not_found", "not_found"]
+    ["request_failed", "request_failed", "request_failed", "not_found", "score_rejected", "not_found", "not_found"]
   );
 
   let persisted: Array<{ matchReport?: AppleMatchReport }> = [];
@@ -118,6 +118,6 @@ test("task loading persists legacy request-failure migration", async () => {
   }
   assert.deepEqual(
     persisted[0]?.matchReport?.results.map((result) => result.status),
-    ["request_failed", "request_failed", "request_failed", "not_found", "not_found", "not_found", "not_found"]
+    ["request_failed", "request_failed", "request_failed", "not_found", "score_rejected", "not_found", "not_found"]
   );
 });

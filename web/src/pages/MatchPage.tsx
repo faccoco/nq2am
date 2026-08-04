@@ -16,6 +16,7 @@ import {
   getAmbiguousIndices,
   getNotFoundIndices,
   getRequestFailedIndices,
+  getScoreRejectedIndices,
   retryScopeForTab,
 } from "../../../src/matchFilters";
 import { useTasks } from "../tasks";
@@ -32,6 +33,7 @@ import type {
 const STATUS_STYLE: Record<AppleMatchStatus, string> = {
   matched: "bg-green-600/20 text-green-300 ring-green-500/40",
   not_found: "bg-red-600/20 text-red-300 ring-red-500/40",
+  score_rejected: "bg-fuchsia-600/20 text-fuchsia-200 ring-fuchsia-500/40",
   ambiguous: "bg-yellow-600/20 text-yellow-200 ring-yellow-500/40",
   request_failed: "bg-orange-600/20 text-orange-200 ring-orange-500/40",
   not_implemented: "bg-slate-600/30 text-slate-300 ring-slate-500/40",
@@ -40,6 +42,7 @@ const STATUS_STYLE: Record<AppleMatchStatus, string> = {
 const RETRY_SCOPES: MatchRetryScope[] = [
   "request_failed",
   "not_found",
+  "score_rejected",
   "ambiguous",
   "selected",
   "all",
@@ -154,6 +157,7 @@ export default function MatchPage() {
       total: 0,
       matched: 0,
       not_found: 0,
+      score_rejected: 0,
       ambiguous: 0,
       request_failed: 0,
       not_implemented: 0,
@@ -205,11 +209,13 @@ export default function MatchPage() {
       setTab(
         retryScope === "not_found"
           ? "not_found"
-          : retryScope === "ambiguous"
-            ? "ambiguous"
-            : retryScope === "request_failed"
-              ? "request_failed"
-              : "all",
+          : retryScope === "score_rejected"
+            ? "score_rejected"
+            : retryScope === "ambiguous"
+              ? "ambiguous"
+              : retryScope === "request_failed"
+                ? "request_failed"
+                : "all",
       );
       setRetrySelectedIndices(new Set());
       setJob((prev) =>
@@ -292,10 +298,16 @@ export default function MatchPage() {
     return getRequestFailedIndices(report.results);
   }, [report]);
 
+  const scoreRejectedIndices = useMemo(() => {
+    if (!report) return [];
+    return getScoreRejectedIndices(report.results);
+  }, [report]);
+
   const retryCounts = useMemo(
     () => ({
       request_failed: requestFailedIndices.length,
       not_found: notFoundIndices.length,
+      score_rejected: scoreRejectedIndices.length,
       ambiguous: ambiguousResultIndices.length,
       selected: retrySelectedIndices.size,
       all: report?.results.length ?? 0,
@@ -305,6 +317,7 @@ export default function MatchPage() {
       notFoundIndices.length,
       report,
       requestFailedIndices.length,
+      scoreRejectedIndices.length,
       retrySelectedIndices.size,
     ],
   );
@@ -500,7 +513,7 @@ export default function MatchPage() {
         )}
       </div>
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
         <StatCard label={t("stats.total")} value={stats.total} tone="neutral" />
         <StatCard
           label={t("stats.matched")}
@@ -511,6 +524,11 @@ export default function MatchPage() {
           label={t("stats.not_found")}
           value={stats.not_found}
           tone="danger"
+        />
+        <StatCard
+          label={t("stats.score_rejected")}
+          value={stats.score_rejected}
+          tone="rejected"
         />
         <StatCard
           label={t("stats.ambiguous")}
@@ -541,6 +559,12 @@ export default function MatchPage() {
             {t("tabs.ambiguous", { count: ambiguousResultIndices.length })}
           </TabButton>
           <TabButton
+            active={tab === "score_rejected"}
+            onClick={() => setTab("score_rejected")}
+          >
+            {t("tabs.score_rejected", { count: scoreRejectedIndices.length })}
+          </TabButton>
+          <TabButton
             active={tab === "request_failed"}
             onClick={() => setTab("request_failed")}
           >
@@ -566,6 +590,38 @@ export default function MatchPage() {
         ) : (
           <div className="space-y-5">
             {ambiguousResultIndices.map((i) => (
+              <ReviewCard
+                key={i}
+                result={report.results[i]}
+                provider={report.provider}
+                busy={selectingIdx === i}
+                retrySelected={retrySelectedIndices.has(i)}
+                onToggleRetrySelected={() => toggleRetrySelected(i)}
+                collapsed={areReviewOptionsCollapsed(
+                  report.results[i],
+                  i,
+                  collapsedReviewOptions,
+                  expandedReviewOptions,
+                )}
+                onToggleCollapsed={() => {
+                  setCollapsedReviewOptions((prev) => toggleReviewOptions(prev, i));
+                  setExpandedReviewOptions((prev) => toggleReviewOptions(prev, i));
+                }}
+                onChoose={(appleMusicId) =>
+                  chooseCandidate(i, appleMusicId, { collapseReviewOptions: true })
+                }
+              />
+            ))}
+          </div>
+        )
+      ) : tab === "score_rejected" ? (
+        scoreRejectedIndices.length === 0 ? (
+          <div className="rounded-lg border border-dashed border-slate-700 bg-slate-800/50 px-6 py-10 text-center text-slate-400">
+            {t("emptyScoreRejected")}
+          </div>
+        ) : (
+          <div className="space-y-5">
+            {scoreRejectedIndices.map((i) => (
               <ReviewCard
                 key={i}
                 result={report.results[i]}
@@ -962,11 +1018,12 @@ function StatCard({
 }: {
   label: string;
   value: number;
-  tone: "success" | "danger" | "warning" | "failure" | "neutral";
+  tone: "success" | "danger" | "rejected" | "warning" | "failure" | "neutral";
 }) {
   const toneClasses: Record<typeof tone, string> = {
     success: "text-green-300",
     danger: "text-red-300",
+    rejected: "text-fuchsia-200",
     warning: "text-yellow-200",
     failure: "text-orange-200",
     neutral: "text-slate-100",

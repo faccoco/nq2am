@@ -27,17 +27,23 @@
   },
   "matching": {
     "title": "Matching",
-    "description": "When you run a match, nq2am searches Apple Music for each source track, scores the candidates, then auto-selects only clear winners. Uncertain tracks go to Ambiguous or Not found. Changes apply the next time you run or retry a match.",
+    "scoringVersion": "Scoring model v{{version}}",
+    "description": "nq2am retrieves candidates with a bounded query cascade, resolves duplicate releases into recordings, and auto-selects only decisive recording groups. Plausible results go to Ambiguous; retrieved candidates below the review threshold go to Score rejected.",
     "loading": "Loading matching preferences…",
     "threshold": {
-      "label": "Match threshold:",
-      "help": "Higher is safer but sends more tracks to review or not found.",
-      "tooltip": "Each candidate receives a score from title, artist, duration, and version hints. If the best score is below this value, it is not auto-selected; the track becomes not found with candidates kept for review."
+      "label": "Automatic match threshold:",
+      "help": "Higher is safer but sends more plausible recordings to review.",
+      "tooltip": "A recording group must reach this confidence and beat the runner-up by the configured margin before nq2am selects it automatically."
+    },
+    "reviewThreshold": {
+      "label": "Review threshold:",
+      "help": "Lower-confidence retrieved candidates are kept in Score rejected.",
+      "tooltip": "The best recording group must reach this lower threshold to enter Ambiguous review. If candidates were retrieved but all groups remain below it, the result is Score rejected rather than Not found."
     },
     "ambiguityGap": {
-      "label": "Ambiguity gap:",
-      "help": "Higher means close choices are reviewed instead of auto-picked.",
-      "tooltip": "After the best candidate passes the threshold, nq2am compares it with the second-best score. If best minus second-best is smaller than this gap, it tries explicit/clean preference and cover similarity; if still unclear, the track goes to Ambiguous."
+      "label": "Recording-group margin:",
+      "help": "Higher means close recording groups are reviewed instead of auto-picked.",
+      "tooltip": "After album and eligible artwork evidence are applied, the winning recording group must exceed the runner-up by at least this margin. Duplicate releases in one recording group do not create false ambiguity."
     },
     "explicit": {
       "label": "Explicit / clean preference",

@@ -7,6 +7,7 @@ import ProviderBadge from "./ProviderBadge";
 const STATUS_STYLE: Record<AppleMatchStatus, string> = {
   matched: "bg-green-600/20 text-green-300 ring-green-500/40",
   not_found: "bg-red-600/20 text-red-300 ring-red-500/40",
+  score_rejected: "bg-fuchsia-600/20 text-fuchsia-200 ring-fuchsia-500/40",
   ambiguous: "bg-yellow-600/20 text-yellow-200 ring-yellow-500/40",
   request_failed: "bg-orange-600/20 text-orange-200 ring-orange-500/40",
   not_implemented: "bg-slate-600/30 text-slate-300 ring-slate-500/40",
@@ -134,16 +135,21 @@ export default function ReviewCard({
           onClick={() => onChoose(null)}
           disabled={busy}
           className={`flex-shrink-0 self-center rounded-md px-3 py-1.5 text-sm font-medium disabled:opacity-60 ${
-            r.selectionSource === "manual" && r.status === "not_found"
+            r.selectionSource === "manual" && (r.status === "not_found" || r.status === "score_rejected")
               ? "bg-red-600 text-white"
               : "bg-red-600/20 text-red-300 ring-1 ring-inset ring-red-500/40 hover:bg-red-600/30"
           }`}
         >
-          {r.selectionSource === "manual" && r.status === "not_found"
+          {r.selectionSource === "manual" && (r.status === "not_found" || r.status === "score_rejected")
             ? t("noMatchSelected")
             : t("noMatch")}
         </button>
       </div>
+      {r.reason && (
+        <p className="mb-2 break-words rounded-md bg-slate-900/40 px-3 py-2 text-xs text-slate-400">
+          {r.reason}
+        </p>
+      )}
       {collapsed ? (
         <div className="flex items-center justify-between gap-3 rounded-md border border-slate-700 bg-slate-900/40 px-3 py-2">
           <div className="min-w-0 text-sm text-slate-300">

@@ -5,6 +5,8 @@ import {
   type AppleCandidate,
   type AppleMatchReport,
   type AppleMatchResult,
+  type AppleRetrievalDiagnostics,
+  CURRENT_SCORING_VERSION,
   DEFAULT_MATCH_PREFERENCES,
   type MatchPreferences,
   type NormalizedPlaylist,
@@ -21,16 +23,22 @@ import {
 import {
   type ArtworkComparator,
   type ArtworkComparatorOptions,
-  type CandidateSimilarity,
   chooseByCoverSimilarity,
   createArtworkComparator
 } from "./artwork.js";
 import { mapWithConcurrency } from "./concurrency.js";
+import { type CoverSimilarityChooser, resolveRecordingDecision } from "./recordingResolution.js";
 import { describeAppleRequestFailure } from "./requestFailure.js";
-import { albumSimilarity, compactAlbumText, compactText, scoreAppleSong } from "./scoring.js";
+import {
+  type AppleQueryPlanItem,
+  appleQueryCacheKey,
+  queryPlanForTrack,
+  type RetrievedAppleSong,
+  unionAppleSearchCandidates
+} from "./retrieval.js";
+import { scoreAppleRecordingEvidence, scoreAppleSong } from "./scoring.js";
 
-/** Number of candidates kept per track so the user can override the pick. */
-const MAX_CANDIDATES = 8;
+const MAX_RETRIEVED_CANDIDATES = 60;
 
 export type AppleMatchLogEvent = {
   event: "request" | "stage" | "job_complete";
@@ -54,15 +62,19 @@ export type AppleMatchExecutionOptions = {
   artworkComparatorFactory?: (options: ArtworkComparatorOptions) => ArtworkComparator;
 };
 
-type CoverSimilarityChooser = (
-  track: NormalizedTrack,
-  candidates: AppleCandidate[]
-) => Promise<CandidateSimilarity | undefined>;
+type QueryCache = Map<string, Promise<AppleSong[]>>;
+
+type RetrievalResult = {
+  candidates: RetrievedAppleSong[];
+  diagnostics: AppleRetrievalDiagnostics;
+  requiredFailure?: unknown;
+};
 
 function requestFailedResult(
   track: NormalizedTrack,
   error: unknown,
-  operation: "session" | "search"
+  operation: "session" | "search",
+  retrieval?: AppleRetrievalDiagnostics
 ): AppleMatchResult {
   const { reason, requestFailure } = describeAppleRequestFailure(error, { operation });
   return {
@@ -70,7 +82,9 @@ function requestFailedResult(
     status: "request_failed",
     candidates: [],
     reason,
-    requestFailure
+    requestFailure,
+    scoringVersion: CURRENT_SCORING_VERSION,
+    retrieval
   };
 }
 
@@ -108,46 +122,34 @@ function apiSessionOptions(
   };
 }
 
-/**
- * Pick the Apple Music storefront whose catalog best holds a track's original
- * text, so non-English tracks are searched (and scored) in their native script
- * rather than the account store's romanized metadata. Returns undefined when no
- * native region applies (Latin text) — the caller then uses the account store.
- */
+/** Pick the native Apple storefront suggested by the track's script. */
 export function detectStorefrontForTrack(
   track: NormalizedTrack,
   mode: MatchPreferences["cjkDetection"]
 ): string | undefined {
   const text = `${track.originalName} ${track.artists.join(" ")} ${track.albumName ?? ""}`;
-  const hasKana = /[぀-ゟ゠-ヿ]/u.test(text); // Hiragana / Katakana
+  const hasKana = /[぀-ゟ゠-ヿ]/u.test(text);
   const hasHangul = /[가-힯ᄀ-ᇿ]/u.test(text);
   const hasHan = /[一-鿿㐀-䶿]/u.test(text);
-
   if (hasHangul) return "kr";
   if (hasKana) return "jp";
   if (hasHan) {
     if (mode === "source") {
-      // Chinese providers → Chinese store; otherwise Han-only is usually Japanese.
       return track.source.provider === "qq" || track.source.provider === "netease" ? "cn" : "jp";
     }
-    // Pure text mode: Han-only most commonly indicates Japanese kanji titles.
     return "jp";
   }
   return undefined;
 }
 
 function buildArtworkUrl(song: AppleSong): string | undefined {
-  const art = song.attributes.artwork;
-  if (!art?.url) return undefined;
-  // Apple artwork URLs are templates with {w}/{h} placeholders.
-  return art.url.replace("{w}", "200").replace("{h}", "200");
+  const url = song.attributes.artwork?.url;
+  return url?.replace("{w}", "200").replace("{h}", "200");
 }
 
-function toCandidate(
-  song: AppleSong,
-  scoreBreakdown: ReturnType<typeof scoreAppleSong>,
-  storefront: string
-): AppleCandidate {
+function toCandidate(track: NormalizedTrack, retrieved: RetrievedAppleSong, prefs: MatchPreferences): AppleCandidate {
+  const breakdown = scoreAppleSong(track, retrieved.song, prefs);
+  const song = retrieved.song;
   return {
     id: song.id,
     name: song.attributes.name,
@@ -158,10 +160,12 @@ function toCandidate(
     durationMs: song.attributes.durationInMillis,
     releaseDate: song.attributes.releaseDate,
     contentRating: song.attributes.contentRating,
-    score: scoreBreakdown.total,
-    scoreBreakdown,
+    score: breakdown.total,
+    scoreBreakdown: breakdown,
+    evidence: breakdown.evidence,
     isrc: song.attributes.isrc,
-    storefront
+    storefront: retrieved.storefront,
+    provenance: retrieved.provenance
   };
 }
 
@@ -183,188 +187,25 @@ function candidateToSong(candidate: AppleCandidate): AppleSong {
   };
 }
 
-function mergePreservedCandidateFields(
-  refreshed: AppleMatchResult,
-  previousCandidates: AppleCandidate[]
-): AppleMatchResult {
-  if (!refreshed.candidates) {
-    return refreshed;
-  }
-
-  const previousById = new Map(previousCandidates.map((candidate) => [candidate.id, candidate]));
-  const candidates = refreshed.candidates.map((candidate) => {
-    const previous = previousById.get(candidate.id);
-    return previous
-      ? {
-          ...candidate,
-          addableId: previous.addableId,
-          artworkUrl: previous.artworkUrl ?? candidate.artworkUrl,
-          storefront: previous.storefront ?? candidate.storefront
-        }
-      : candidate;
-  });
-  const selected = refreshed.selectedId
-    ? candidates.find((candidate) => candidate.id === refreshed.selectedId)
-    : undefined;
-
+function syntheticRetrieval(results: readonly AppleSong[], storefront: string): AppleRetrievalDiagnostics {
   return {
-    ...refreshed,
-    candidates,
-    appleMusicId: selected?.addableId ?? refreshed.appleMusicId,
-    appleMusicUrl: selected?.url ?? refreshed.appleMusicUrl
+    outcome: "success",
+    queryBudget: 1,
+    queries: [
+      {
+        queryId: "saved-candidates",
+        variant: "base_title",
+        term: "saved candidates",
+        storefront,
+        required: true,
+        status: "success",
+        candidateCount: results.length
+      }
+    ],
+    uniqueCandidateCount: results.length,
+    earlyStopped: false,
+    cacheHits: 0
   };
-}
-
-function resultChanged(previous: AppleMatchResult, next: AppleMatchResult): boolean {
-  if (previous.status !== next.status) return true;
-  if (previous.selectedId !== next.selectedId) return true;
-  if (previous.appleMusicId !== next.appleMusicId) return true;
-  if (previous.reason !== next.reason) return true;
-
-  const previousCandidates = previous.candidates ?? [];
-  const nextCandidates = next.candidates ?? [];
-  if (previousCandidates.length !== nextCandidates.length) return true;
-
-  return nextCandidates.some((candidate, index) => {
-    const previousCandidate = previousCandidates[index];
-    return (
-      previousCandidate.id !== candidate.id ||
-      previousCandidate.score !== candidate.score ||
-      previousCandidate.scoreBreakdown?.total !== candidate.scoreBreakdown?.total
-    );
-  });
-}
-
-function shouldRefreshExistingCandidates(result: AppleMatchResult): result is AppleMatchResult & {
-  candidates: AppleCandidate[];
-} {
-  if (result.selectionSource === "manual") return false;
-  if (!result.candidates || result.candidates.length === 0) return false;
-  return result.status === "ambiguous" || result.status === "not_found";
-}
-
-/** Tie-break preference for explicit/clean when scores are otherwise equal. */
-function explicitRank(candidate: AppleCandidate, prefs: MatchPreferences): number {
-  if (prefs.explicitPreference === "none") return 0;
-  if (prefs.explicitPreference === "explicit") {
-    return candidate.contentRating === "explicit" ? 1 : 0;
-  }
-  // prefer clean
-  return candidate.contentRating === "clean" ? 1 : 0;
-}
-
-function hasEquivalentDuration(left: AppleCandidate, right: AppleCandidate): boolean {
-  if (!left.durationMs || !right.durationMs) {
-    return left.durationMs === right.durationMs;
-  }
-  return Math.abs(left.durationMs - right.durationMs) <= 2_000;
-}
-
-function isEquivalentCandidate(left: AppleCandidate, right: AppleCandidate): boolean {
-  return (
-    compactText(left.name) === compactText(right.name) &&
-    compactText(left.artistName) === compactText(right.artistName) &&
-    compactAlbumText(left.albumName ?? "") === compactAlbumText(right.albumName ?? "") &&
-    hasEquivalentDuration(left, right)
-  );
-}
-
-function matchesSourceAlbum(track: NormalizedTrack, candidate: AppleCandidate): boolean {
-  const sourceAlbum = compactAlbumText(track.albumName ?? "");
-  return Boolean(sourceAlbum) && compactAlbumText(candidate.albumName ?? "") === sourceAlbum;
-}
-
-function chooseIndistinguishableDuplicate(
-  track: NormalizedTrack,
-  candidates: AppleCandidate[]
-): AppleCandidate | undefined {
-  const best = candidates[0];
-  if (!best || candidates.length < 2) return undefined;
-  if (!candidates.every((candidate) => matchesSourceAlbum(track, candidate))) return undefined;
-  return candidates.every((candidate) => isEquivalentCandidate(best, candidate)) ? best : undefined;
-}
-
-function chooseByAlbumSimilarity(
-  track: NormalizedTrack,
-  candidates: AppleCandidate[]
-): { candidate: AppleCandidate; similarity: number } | undefined {
-  const sourceAlbum = compactAlbumText(track.albumName ?? "");
-  if (!sourceAlbum) return undefined;
-
-  let candidate = candidates[0];
-  let similarity = candidate.scoreBreakdown?.fields.album ?? albumSimilarity(track.albumName, candidate.albumName);
-
-  for (const current of candidates.slice(1)) {
-    const currentSimilarity =
-      current.scoreBreakdown?.fields.album ?? albumSimilarity(track.albumName, current.albumName);
-    if (currentSimilarity > similarity || (currentSimilarity === similarity && current.score > candidate.score)) {
-      candidate = current;
-      similarity = currentSimilarity;
-    }
-  }
-
-  return { candidate, similarity };
-}
-
-function chooseByDurationSimilarity(candidates: AppleCandidate[]): AppleCandidate | undefined {
-  const scored = candidates
-    .map((candidate) => ({
-      candidate,
-      durationScore: candidate.scoreBreakdown?.fields.duration ?? 0,
-      titleScore: candidate.scoreBreakdown?.fields.title ?? 0,
-      artistScore: candidate.scoreBreakdown?.fields.artist ?? 0,
-      versionScore: candidate.scoreBreakdown?.fields.version ?? 0
-    }))
-    .sort((a, b) => b.durationScore - a.durationScore);
-
-  const best = scored[0];
-  const second = scored[1];
-  if (!best || !second) return undefined;
-  if (best.durationScore < 0.95) return undefined;
-  if (best.durationScore - second.durationScore < 0.5) return undefined;
-  if (best.titleScore < 0.8 || best.artistScore < 0.5) return undefined;
-  if (best.versionScore < 0.8) return undefined;
-  return best.candidate;
-}
-
-function scoreGapReason(best: AppleCandidate, second: AppleCandidate | undefined, prefs: MatchPreferences): string {
-  if (!second) {
-    return `score ${best.score.toFixed(2)}`;
-  }
-
-  const gap = best.score - second.score;
-  return `best ${best.score.toFixed(2)} vs second ${second.score.toFixed(2)}; gap ${gap.toFixed(2)} / required ${prefs.ambiguousGap.toFixed(2)}`;
-}
-
-function matchedResult(
-  track: NormalizedTrack,
-  candidates: AppleCandidate[],
-  winner: AppleCandidate,
-  reason?: string
-): AppleMatchResult {
-  return {
-    track,
-    status: "matched",
-    candidates,
-    selectedId: winner.id,
-    selectionSource: "auto",
-    appleMusicId: winner.id,
-    appleMusicUrl: winner.url,
-    reason
-  };
-}
-
-function sharedRecordingIsrc(candidates: AppleCandidate[]): string | undefined {
-  const isrc = candidates[0].isrc;
-  return isrc && candidates.every((candidate) => candidate.isrc === isrc) ? isrc : undefined;
-}
-
-function retainCandidates(ranked: AppleCandidate[], winner: AppleCandidate): AppleCandidate[] {
-  const retained = ranked.slice(0, MAX_CANDIDATES);
-  if (retained.some((candidate) => candidate.id === winner.id)) {
-    return retained;
-  }
-  return [...retained.slice(0, MAX_CANDIDATES - 1), winner];
 }
 
 export async function matchSingleTrack(
@@ -374,121 +215,173 @@ export async function matchSingleTrack(
   prefs: MatchPreferences,
   chooseCover: CoverSimilarityChooser = chooseByCoverSimilarity
 ): Promise<AppleMatchResult> {
+  const retrieval = syntheticRetrieval(results, storefront);
   if (results.length === 0) {
-    return { track, status: "not_found", candidates: [], reason: "No results from Apple Music search" };
-  }
-
-  const searchOrderCandidates = results.map((song) => {
-    const scoreBreakdown = scoreAppleSong(track, song, prefs);
-    return toCandidate(song, scoreBreakdown, storefront);
-  });
-  const ranked = [...searchOrderCandidates].sort((a, b) => {
-    if (b.score !== a.score) return b.score - a.score;
-    // Equal score → apply explicit/clean preference as a tie-break.
-    return explicitRank(b, prefs) - explicitRank(a, prefs);
-  });
-  const scored = ranked.slice(0, MAX_CANDIDATES);
-
-  const best = scored[0];
-
-  if (best.score < prefs.threshold) {
-    const durationChoice = chooseByDurationSimilarity(scored);
-    if (
-      durationChoice &&
-      best.score - durationChoice.score < prefs.ambiguousGap &&
-      durationChoice.score >= Math.max(0.75, prefs.threshold - 0.1)
-    ) {
-      const durationScore = durationChoice.scoreBreakdown?.fields.duration ?? 0;
-      return matchedResult(
-        track,
-        scored,
-        durationChoice,
-        `Selected by duration-backed version match (${durationScore.toFixed(2)}; score ${durationChoice.score.toFixed(2)} below threshold ${prefs.threshold.toFixed(2)} but title/artist/version agree)`
-      );
-    }
-
     return {
       track,
       status: "not_found",
-      candidates: scored,
-      reason: `Best match score ${best.score.toFixed(2)} below threshold ${prefs.threshold.toFixed(2)} (${scoreGapReason(best, scored[1], prefs)})`
+      candidates: [],
+      scoringVersion: prefs.scoringVersion,
+      retrieval,
+      reason: `No results from Apple Music search (attempted saved candidates in ${storefront})`
     };
   }
 
-  const eligible = searchOrderCandidates.filter((candidate) => candidate.score >= prefs.threshold);
-  const duplicateChoice = chooseIndistinguishableDuplicate(track, eligible);
-  if (duplicateChoice) {
-    return matchedResult(
-      track,
-      retainCandidates(ranked, duplicateChoice),
-      duplicateChoice,
-      `Selected first indistinguishable duplicate (${scoreGapReason(best, scored[1], prefs)})`
-    );
+  const retrieved = results.map(
+    (song, index): RetrievedAppleSong => ({
+      song,
+      storefront,
+      firstSeen: index,
+      provenance: [
+        {
+          queryId: "saved-candidates",
+          variant: "base_title",
+          term: "saved candidates",
+          storefront,
+          rank: index + 1
+        }
+      ]
+    })
+  );
+  const candidates = retrieved.map((item) => toCandidate(track, item, prefs));
+  return resolveRecordingDecision(track, candidates, prefs, storefront, chooseCover, retrieval);
+}
+
+function hasPlausibleRecording(
+  track: NormalizedTrack,
+  values: Iterable<RetrievedAppleSong>,
+  prefs: MatchPreferences
+): boolean {
+  for (const item of values) {
+    if (scoreAppleRecordingEvidence(track, item.song, prefs).confidence >= prefs.reviewThreshold) return true;
+  }
+  return false;
+}
+
+function hasDeterministicRecording(
+  track: NormalizedTrack,
+  values: Iterable<RetrievedAppleSong>,
+  prefs: MatchPreferences
+): boolean {
+  for (const item of values) {
+    const evidence = scoreAppleRecordingEvidence(track, item.song, prefs);
+    if (evidence.deterministicIdentity && evidence.automaticEligible) return true;
+  }
+  return false;
+}
+
+async function runQuery(
+  query: AppleQueryPlanItem,
+  session: AppleApiSession,
+  cache: QueryCache
+): Promise<{ songs: AppleSong[]; fromCache: boolean }> {
+  const key = appleQueryCacheKey(query.term, query.storefront);
+  const cached = cache.get(key);
+  if (cached) return { songs: await cached, fromCache: true };
+  const pending = session.search(query.term, query.storefront);
+  cache.set(key, pending);
+  return { songs: await pending, fromCache: false };
+}
+
+async function retrieveTrackCandidates(
+  track: NormalizedTrack,
+  trackIndex: number,
+  accountStorefront: string,
+  prefs: MatchPreferences,
+  session: AppleApiSession,
+  cache: QueryCache,
+  logger: (event: AppleMatchLogEvent) => void,
+  jobId: string | undefined
+): Promise<RetrievalResult> {
+  const plan = queryPlanForTrack(track, accountStorefront, prefs, detectStorefrontForTrack);
+  const union = new Map<string, RetrievedAppleSong>();
+  let ordinal = 0;
+  let successfulResponses = 0;
+  let earlyStopped = false;
+  let cacheHits = 0;
+  const queries: AppleRetrievalDiagnostics["queries"] = [];
+
+  for (const query of plan) {
+    if (query.fallback && hasPlausibleRecording(track, union.values(), prefs)) break;
+    const startedAt = performance.now();
+    try {
+      const { songs, fromCache } = await runQuery(query, session, cache);
+      successfulResponses += 1;
+      if (fromCache) cacheHits += 1;
+      unionAppleSearchCandidates(union, songs, query, () => ordinal++);
+      queries.push({
+        queryId: query.id,
+        variant: query.variant,
+        term: query.term,
+        storefront: query.storefront,
+        required: query.required,
+        status: "success",
+        candidateCount: songs.length,
+        fromCache: fromCache || undefined
+      });
+      logger({
+        event: "stage",
+        jobId,
+        stage: "search",
+        trackIndex,
+        durationMs: durationSince(startedAt),
+        outcome: "success"
+      });
+      if (hasDeterministicRecording(track, union.values(), prefs)) {
+        earlyStopped = true;
+        break;
+      }
+    } catch (error) {
+      queries.push({
+        queryId: query.id,
+        variant: query.variant,
+        term: query.term,
+        storefront: query.storefront,
+        required: query.required,
+        status: "failed",
+        candidateCount: 0,
+        reason: error instanceof Error ? error.message : String(error)
+      });
+      logger({
+        event: "stage",
+        jobId,
+        stage: "search",
+        trackIndex,
+        durationMs: durationSince(startedAt),
+        outcome: "error"
+      });
+      if (query.required && successfulResponses === 0) {
+        return {
+          candidates: [],
+          requiredFailure: error,
+          diagnostics: {
+            outcome: "failed",
+            queryBudget: plan.length,
+            queries,
+            uniqueCandidateCount: 0,
+            earlyStopped: false,
+            cacheHits
+          }
+        };
+      }
+      // Optional failures are isolated; later passes may still complete.
+    }
   }
 
-  const albumChoice = chooseByAlbumSimilarity(track, eligible);
-  if (albumChoice) {
-    return matchedResult(
-      track,
-      retainCandidates(ranked, albumChoice.candidate),
-      albumChoice.candidate,
-      `Selected by album match using album similarity (${albumChoice.similarity.toFixed(2)})`
-    );
-  }
-
-  const second = scored[1];
-  const isTie = second !== undefined && best.score - second.score < prefs.ambiguousGap;
-
-  if (isTie) {
-    // Try to break the tie decisively with the explicit/clean preference.
-    const bestRank = explicitRank(best, prefs);
-    const secondRank = explicitRank(second, prefs);
-    if (prefs.explicitPreference !== "none" && bestRank !== secondRank) {
-      const winner = bestRank > secondRank ? best : second;
-      return matchedResult(
-        track,
-        scored,
-        winner,
-        `Selected by explicit/clean preference (${scoreGapReason(best, second, prefs)})`
-      );
+  const candidates = [...union.values()]
+    .sort((left, right) => left.firstSeen - right.firstSeen)
+    .slice(0, MAX_RETRIEVED_CANDIDATES);
+  return {
+    candidates,
+    diagnostics: {
+      outcome: successfulResponses > 0 ? "success" : "failed",
+      queryBudget: plan.length,
+      queries,
+      uniqueCandidateCount: candidates.length,
+      earlyStopped,
+      cacheHits
     }
-
-    const nearTied = scored.filter((candidate) => best.score - candidate.score < prefs.ambiguousGap);
-    const sharedIsrc = sharedRecordingIsrc(nearTied);
-    if (sharedIsrc) {
-      return matchedResult(track, scored, best, `Equivalent releases share ISRC ${sharedIsrc}`);
-    }
-
-    const durationChoice = chooseByDurationSimilarity(nearTied);
-    if (durationChoice) {
-      const durationScore = durationChoice.scoreBreakdown?.fields.duration ?? 0;
-      return matchedResult(
-        track,
-        scored,
-        durationChoice,
-        `Selected by duration match (${durationScore.toFixed(2)}; ${scoreGapReason(best, second, prefs)})`
-      );
-    }
-
-    const coverChoice = await chooseCover(track, nearTied);
-    if (coverChoice) {
-      return matchedResult(
-        track,
-        scored,
-        coverChoice.candidate,
-        `Selected by album cover similarity (${coverChoice.similarity.toFixed(2)}; ${scoreGapReason(best, second, prefs)})`
-      );
-    }
-
-    return {
-      track,
-      status: "ambiguous",
-      candidates: scored,
-      reason: `Multiple close matches (${scoreGapReason(best, second, prefs)}); no decisive explicit, album, duration, or cover tie-breaker`
-    };
-  }
-
-  return matchedResult(track, scored, best, `Selected best match (${scoreGapReason(best, second, prefs)})`);
+  };
 }
 
 async function resolveCandidateId(
@@ -496,17 +389,12 @@ async function resolveCandidateId(
   accountStore: string,
   session: AppleApiSession
 ): Promise<string> {
-  if (candidate.addableId) {
-    return candidate.addableId;
-  }
+  if (candidate.addableId) return candidate.addableId;
   if (!candidate.storefront || candidate.storefront === accountStore) {
     candidate.addableId = candidate.id;
     return candidate.id;
   }
-  if (!candidate.isrc) {
-    return candidate.id;
-  }
-
+  if (!candidate.isrc) return candidate.id;
   try {
     const matches = await session.songsByIsrc(candidate.isrc, accountStore);
     if (matches.length > 0) {
@@ -514,59 +402,74 @@ async function resolveCandidateId(
       return candidate.addableId;
     }
   } catch {
-    // Bridging is best-effort. Playlist creation retains the existing fallback.
+    // Cross-store bridging is best-effort and not a retrieval failure.
   }
   return candidate.id;
 }
 
-/**
- * Match one track: search its native store (when nativeSearch is on and the
- * track's script implies a non-account region), score there, then bridge the
- * candidates back to the account store via ISRC so they can be added to the
- * user's library.
- */
 async function processTrack(
   track: NormalizedTrack,
   trackIndex: number,
   accountStore: string,
   prefs: MatchPreferences,
   session: AppleApiSession,
+  cache: QueryCache,
   artworkComparator: ArtworkComparator,
   logger: (event: AppleMatchLogEvent) => void,
   jobId: string | undefined
 ): Promise<AppleMatchResult> {
-  const query = `${track.originalName} ${track.artists[0] ?? ""}`.trim();
-  const nativeStore = prefs.nativeSearch ? detectStorefrontForTrack(track, prefs.cjkDetection) : undefined;
-  const searchStore = nativeStore && nativeStore !== accountStore ? nativeStore : accountStore;
-
-  const searchStartedAt = performance.now();
-  const songs = await session.search(query, searchStore);
-  logger({
-    event: "stage",
-    jobId,
-    stage: "search",
+  const retrieval = await retrieveTrackCandidates(
+    track,
     trackIndex,
-    durationMs: durationSince(searchStartedAt),
-    outcome: "success"
-  });
+    accountStore,
+    prefs,
+    session,
+    cache,
+    logger,
+    jobId
+  );
+  if (retrieval.requiredFailure) {
+    return requestFailedResult(track, retrieval.requiredFailure, "search", retrieval.diagnostics);
+  }
+  if (retrieval.candidates.length === 0) {
+    const attempted = retrieval.diagnostics.queries
+      .map((query) => `${query.variant} "${query.term}" (${query.storefront}, ${query.status})`)
+      .join("; ");
+    return {
+      track,
+      status: "not_found",
+      candidates: [],
+      scoringVersion: prefs.scoringVersion,
+      retrieval: retrieval.diagnostics,
+      reason: `No results from Apple Music search after ${retrieval.diagnostics.queries.length} bounded passes: ${attempted}`
+    };
+  }
 
+  const candidates = retrieval.candidates.map((item) => toCandidate(track, item, prefs));
   const evaluationStartedAt = performance.now();
-  const result = await matchSingleTrack(track, songs, searchStore, prefs, async (sourceTrack, candidates) => {
-    const artworkStartedAt = performance.now();
-    try {
-      return await artworkComparator.choose(sourceTrack, candidates);
-    } catch {
-      return undefined;
-    } finally {
-      logger({
-        event: "stage",
-        jobId,
-        stage: "artwork",
-        trackIndex,
-        durationMs: durationSince(artworkStartedAt)
-      });
-    }
-  });
+  const result = await resolveRecordingDecision(
+    track,
+    candidates,
+    prefs,
+    accountStore,
+    async (sourceTrack, plausibleCandidates) => {
+      const artworkStartedAt = performance.now();
+      try {
+        return await artworkComparator.choose(sourceTrack, plausibleCandidates);
+      } catch {
+        return undefined;
+      } finally {
+        logger({
+          event: "stage",
+          jobId,
+          stage: "artwork",
+          trackIndex,
+          durationMs: durationSince(artworkStartedAt)
+        });
+      }
+    },
+    retrieval.diagnostics
+  );
   logger({
     event: "stage",
     jobId,
@@ -579,7 +482,7 @@ async function processTrack(
   if (result.selectedId && result.candidates) {
     const selected = result.candidates.find((candidate) => candidate.id === result.selectedId);
     if (selected) {
-      if (searchStore === accountStore) {
+      if (selected.storefront === accountStore) {
         selected.addableId = selected.id;
       } else {
         const isrcStartedAt = performance.now();
@@ -595,18 +498,9 @@ async function processTrack(
       }
     }
   }
-
   return result;
 }
 
-/**
- * Match all tracks in a playlist against the Apple Music catalog.
- * Requires Apple Music login (cookies).
- *
- * `prefs` tunes thresholds, tie-break rules, and native-region search.
- * `onProgress` (optional) is invoked after each track so a caller can surface
- * live progress.
- */
 export async function matchAppleMusic(
   playlist: NormalizedPlaylist,
   prefs: MatchPreferences = DEFAULT_MATCH_PREFERENCES,
@@ -620,9 +514,11 @@ export async function matchAppleMusic(
         provider: playlist.provider,
         playlistId: playlist.id,
         playlistName: playlist.name,
+        scoringVersion: prefs.scoringVersion,
         results: playlist.tracks.map((track) => ({
           track,
           status: "not_implemented",
+          scoringVersion: prefs.scoringVersion,
           reason: "Not logged in to Apple Music. Please log in from Settings."
         }))
       };
@@ -658,24 +554,18 @@ export async function matchAppleMusic(
       outcome: "success"
     });
   } catch (error) {
-    logger({
-      event: "stage",
-      jobId,
-      stage: "session",
-      durationMs: durationSince(sessionStartedAt),
-      outcome: "error"
-    });
+    logger({ event: "stage", jobId, stage: "session", durationMs: durationSince(sessionStartedAt), outcome: "error" });
     return {
       provider: playlist.provider,
       playlistId: playlist.id,
       playlistName: playlist.name,
-      results: playlist.tracks.map((track) => ({
-        ...requestFailedResult(track, error, "session")
-      }))
+      scoringVersion: prefs.scoringVersion,
+      results: playlist.tracks.map((track) => requestFailedResult(track, error, "session"))
     };
   }
 
   const artworkComparator = artworkComparatorFactory({ timeoutMs: prefs.artworkTimeoutMs });
+  const queryCache: QueryCache = new Map();
   try {
     let accountStore = prefs.storefront.trim();
     if (!accountStore) {
@@ -694,7 +584,17 @@ export async function matchAppleMusic(
         const trackStartedAt = performance.now();
         let outcome: "success" | "error" = "success";
         try {
-          return await processTrack(track, trackIndex, accountStore, prefs, session, artworkComparator, logger, jobId);
+          return await processTrack(
+            track,
+            trackIndex,
+            accountStore,
+            prefs,
+            session,
+            queryCache,
+            artworkComparator,
+            logger,
+            jobId
+          );
         } catch (error) {
           outcome = "error";
           return requestFailedResult(track, error, "search");
@@ -709,15 +609,14 @@ export async function matchAppleMusic(
           });
         }
       },
-      (result, _index, completed) => {
-        onProgress?.(completed, total, result);
-      }
+      (result, _index, completed) => onProgress?.(completed, total, result)
     );
 
     return {
       provider: playlist.provider,
       playlistId: playlist.id,
       playlistName: playlist.name,
+      scoringVersion: prefs.scoringVersion,
       results
     };
   } finally {
@@ -735,11 +634,6 @@ export async function matchAppleMusic(
   }
 }
 
-/**
- * Re-run Apple Music matching only for results currently marked not_found,
- * including manual "no match" rows, then merge those refreshed results back
- * into the existing report.
- */
 export async function retryNotFoundAppleMusic(
   report: AppleMatchReport,
   prefs: MatchPreferences = DEFAULT_MATCH_PREFERENCES,
@@ -757,32 +651,69 @@ export async function retryAppleMusicResults(
   execution: AppleMatchExecutionOptions = {}
 ): Promise<AppleMatchReport> {
   const retryIndices = Array.from(new Set(indices)).filter(
-    (idx) => Number.isInteger(idx) && idx >= 0 && idx < report.results.length
+    (index) => Number.isInteger(index) && index >= 0 && index < report.results.length
   );
-  if (retryIndices.length === 0) {
-    return report;
-  }
+  if (retryIndices.length === 0) return report;
 
   const retryPlaylist: NormalizedPlaylist = {
     provider: report.provider,
     id: report.playlistId,
     name: report.playlistName,
-    tracks: retryIndices.map((idx) => report.results[idx].track),
+    tracks: retryIndices.map((index) => report.results[index].track),
     raw: {}
   };
   const retryReport = await matchAppleMusic(retryPlaylist, prefs, onProgress, execution);
   const results = report.results.slice();
-  for (const [pos, idx] of retryIndices.entries()) {
-    const next = retryReport.results[pos];
-    if (next) {
-      results[idx] = next;
-    }
-  }
+  retryIndices.forEach((index, position) => {
+    const next = retryReport.results[position];
+    if (next) results[index] = next;
+  });
+  return { ...report, scoringVersion: prefs.scoringVersion, results };
+}
 
+function shouldRefreshExistingCandidates(
+  result: AppleMatchResult
+): result is AppleMatchResult & { candidates: AppleCandidate[] } {
+  if (result.selectionSource === "manual" || !result.candidates?.length) return false;
+  return result.status === "ambiguous" || result.status === "not_found" || result.status === "score_rejected";
+}
+
+function mergePreservedCandidateFields(refreshed: AppleMatchResult, previous: AppleCandidate[]): AppleMatchResult {
+  if (!refreshed.candidates) return refreshed;
+  const byKey = new Map(previous.map((candidate) => [`${candidate.storefront ?? ""}:${candidate.id}`, candidate]));
+  const candidates = refreshed.candidates.map((candidate) => {
+    const old =
+      byKey.get(`${candidate.storefront ?? ""}:${candidate.id}`) ?? previous.find((item) => item.id === candidate.id);
+    return old
+      ? {
+          ...candidate,
+          addableId: old.addableId,
+          artworkUrl: old.artworkUrl ?? candidate.artworkUrl,
+          storefront: old.storefront ?? candidate.storefront,
+          provenance: old.provenance ?? candidate.provenance
+        }
+      : candidate;
+  });
+  const selected = refreshed.selectedId
+    ? candidates.find((candidate) => candidate.id === refreshed.selectedId)
+    : undefined;
   return {
-    ...report,
-    results
+    ...refreshed,
+    candidates,
+    appleMusicId: selected?.addableId ?? refreshed.appleMusicId,
+    appleMusicUrl: selected?.url ?? refreshed.appleMusicUrl
   };
+}
+
+function resultChanged(previous: AppleMatchResult, next: AppleMatchResult): boolean {
+  if (previous.status !== next.status || previous.selectedId !== next.selectedId || previous.reason !== next.reason)
+    return true;
+  const left = previous.candidates ?? [];
+  const right = next.candidates ?? [];
+  return (
+    left.length !== right.length ||
+    right.some((candidate, index) => left[index]?.id !== candidate.id || left[index]?.score !== candidate.score)
+  );
 }
 
 export async function refreshAppleMatchReportCandidates(
@@ -792,20 +723,22 @@ export async function refreshAppleMatchReportCandidates(
   const results: AppleMatchResult[] = [];
   let changed = false;
   const artworkComparator = createArtworkComparator({ timeoutMs: prefs.artworkTimeoutMs });
-
   try {
     for (const result of report.results) {
       if (!shouldRefreshExistingCandidates(result)) {
         results.push(result);
         continue;
       }
-
       try {
-        const storefront = result.candidates.find((candidate) => candidate.storefront)?.storefront ?? prefs.storefront;
-        const songs = result.candidates.map(candidateToSong);
+        const storefront =
+          (result.candidates.find((candidate) => candidate.storefront)?.storefront ?? prefs.storefront) || "us";
         const refreshed = mergePreservedCandidateFields(
-          await matchSingleTrack(result.track, songs, storefront || "us", prefs, (track, candidates) =>
-            artworkComparator.choose(track, candidates)
+          await matchSingleTrack(
+            result.track,
+            result.candidates.map(candidateToSong),
+            storefront,
+            prefs,
+            (track, candidates) => artworkComparator.choose(track, candidates)
           ),
           result.candidates
         );
@@ -818,8 +751,7 @@ export async function refreshAppleMatchReportCandidates(
   } finally {
     await artworkComparator.close();
   }
-
-  return changed ? { ...report, results } : report;
+  return changed ? { ...report, scoringVersion: prefs.scoringVersion, results } : report;
 }
 
 export async function resolveAppleMusicTrackIds(
@@ -831,10 +763,7 @@ export async function resolveAppleMusicTrackIds(
   const matched = report.results.filter((result) => result.status === "matched");
   const resolved = await mapWithConcurrency(matched, concurrency, async (result) => {
     const selected = result.candidates?.find((candidate) => candidate.id === result.selectedId);
-    if (!selected) {
-      return result.appleMusicId;
-    }
-
+    if (!selected) return result.appleMusicId;
     const id = await resolveCandidateId(selected, accountStore, session);
     result.appleMusicId = id;
     return id;
@@ -842,9 +771,6 @@ export async function resolveAppleMusicTrackIds(
   return resolved.filter((id): id is string => Boolean(id));
 }
 
-/**
- * Create an Apple Music playlist from matched tracks.
- */
 export async function createAppleMusicPlaylist(name: string, description: string, trackIds: string[]): Promise<string> {
   return appleCreatePlaylist(name, description, trackIds);
 }
@@ -860,18 +786,14 @@ export async function createAppleMusicPlaylistFromReport(
   const session = await sessionFactory(apiSessionOptions(prefs));
   try {
     let accountStore = prefs.storefront.trim();
-    if (!accountStore) {
-      accountStore = await session.getStorefront().catch(() => "us");
-    }
+    if (!accountStore) accountStore = await session.getStorefront().catch(() => "us");
     const trackIds = await resolveAppleMusicTrackIds(
       report,
       accountStore,
       session,
       execution.concurrency ?? prefs.matchConcurrency
     );
-    if (trackIds.length === 0) {
-      throw new Error("No matched tracks to add to playlist");
-    }
+    if (trackIds.length === 0) throw new Error("No matched tracks to add to playlist");
     return session.createPlaylist(name, description, trackIds);
   } finally {
     await session.close();

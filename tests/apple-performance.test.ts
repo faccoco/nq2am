@@ -792,7 +792,7 @@ test("matching marks a session initialization timeout as request failed", async 
   });
 });
 
-test("artwork comparison failure preserves an ambiguous metadata decision", async () => {
+test("artwork comparison failure preserves a grouped metadata decision", async () => {
   const playlist: NormalizedPlaylist = {
     provider: "qq",
     id: "failed-artwork",
@@ -828,7 +828,8 @@ test("artwork comparison failure preserves an ambiguous metadata decision", asyn
     }
   );
 
-  assert.equal(report.results[0].status, "ambiguous");
+  assert.equal(report.results[0].status, "matched");
+  assert.equal(report.results[0].recordingGroups?.length, 1);
   assert.equal(report.results[0].requestFailure, undefined);
 });
 

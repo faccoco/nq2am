@@ -1,0 +1,13 @@
+{
+  "scoringVersion": 1,
+  "provenance": "tests/fixtures/real-songs-same-recording.json captured candidate sets",
+  "capturedThreshold": 0.7,
+  "capturedAmbiguousGap": 0.1,
+  "labeledTracks": 40,
+  "candidateEntries": 182,
+  "knownLimitations": [
+    "Single-query candidate retrieval was not measured independently.",
+    "Below-threshold candidates and zero-result searches shared not_found status.",
+    "Release entries were ranked before recording grouping."
+  ]
+}
