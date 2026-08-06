@@ -79,6 +79,13 @@ function durationSince(startedAt: number): number {
   return Math.round((performance.now() - startedAt) * 100) / 100;
 }
 
+function buildSearchTerm(track: NormalizedTrack): string {
+  return [track.originalName, ...track.artists]
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .join(" ");
+}
+
 function apiSessionOptions(
   prefs: MatchPreferences,
   onRequest?: AppleApiSessionOptions["onRequest"]
@@ -238,8 +245,8 @@ export async function matchSingleTrack(
 }
 
 /**
- * Match one track: search the account storefront by song title, score the
- * candidates, and pick the best match.
+ * Match one track: search the account storefront by song title and artists,
+ * preserve the returned ranking, and evaluate Apple's top result.
  */
 async function processTrack(
   track: NormalizedTrack,
@@ -251,7 +258,7 @@ async function processTrack(
   jobId: string | undefined
 ): Promise<AppleMatchResult> {
   const searchStartedAt = performance.now();
-  const songs = await session.search(track.originalName, accountStore);
+  const songs = await session.search(buildSearchTerm(track), accountStore);
   logger({
     event: "stage",
     jobId,

@@ -100,6 +100,43 @@ test("Apple Music matcher returns explicit not implemented results", async () =>
   assert.equal(report.results[0].status, "not_implemented");
 });
 
+test("Apple Music matcher searches by song name and artists", async () => {
+  const { matchAppleMusic } = await loadAppModule();
+  let searchedTerm: string | undefined;
+  let searchedStorefront: string | undefined;
+  const playlist: NormalizedPlaylist = {
+    provider: "qq",
+    id: "search-term",
+    name: "Search term",
+    tracks: [
+      {
+        originalName: " Song ",
+        artists: ["Primary Artist", " Featured Artist "],
+        source: { provider: "qq", playlistId: "search-term", songId: "song", raw: {} }
+      }
+    ],
+    raw: {}
+  };
+
+  await matchAppleMusic(playlist, { ...DEFAULT_MATCH_PREFERENCES, storefront: "jp" }, undefined, {
+    logger: () => {},
+    sessionFactory: async () => ({
+      search: async (term, storefront) => {
+        searchedTerm = term;
+        searchedStorefront = storefront;
+        return [];
+      },
+      getStorefront: async () => "us",
+      createPlaylist: async () => "playlist",
+      getStats: () => ({ requestCount: 1, retryCount: 0 }),
+      close: async () => {}
+    })
+  });
+
+  assert.equal(searchedTerm, "Song Primary Artist Featured Artist");
+  assert.equal(searchedStorefront, "jp");
+});
+
 test("Apple Music matcher normalizes exact metadata score and records breakdown", async () => {
   const { matchSingleTrack } = await loadMatcherModule();
   const result = await matchSingleTrack(
