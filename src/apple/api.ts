@@ -64,6 +64,8 @@ export type AppleApiSessionOptions = {
   randomPauseMaxMs?: number;
   maxAttempts?: number;
   baseRetryDelayMs?: number;
+  rateLimitCooldownMs?: number;
+  onRateLimitCooldown?: (cooldownMs: number) => void;
   onRequest?: (metric: AppleApiRequestMetric) => void;
 };
 
@@ -78,8 +80,9 @@ export type AppleApiSession = {
 const TOKEN_CAPTURE_TIMEOUT_MS = 30_000;
 const DEFAULT_REQUEST_TIMEOUT_MS = 15_000;
 const DEFAULT_REQUEST_INTERVAL_MS = 150;
-const DEFAULT_MAX_ATTEMPTS = 3;
+const DEFAULT_MAX_ATTEMPTS = 4;
 const DEFAULT_RETRY_DELAY_MS = 750;
+const DEFAULT_RATE_LIMIT_COOLDOWN_MS = 5_000;
 
 let sharedBrowser: Browser | undefined;
 let sharedBrowserPromise: Promise<Browser> | undefined;
@@ -275,13 +278,9 @@ function isRetryable(error: unknown, attempt: number, operation: AppleApiOperati
     return error.status === 429;
   }
 
-  if (!(error instanceof AppleApiError)) {
-    return true;
-  }
-  if (error.status === 401) {
-    return attempt === 1;
-  }
-  return error.status === 429 || error.status >= 500;
+  // Catalog reads are idempotent, so every request failure gets three
+  // automatic retries before it is surfaced to the matching report.
+  return true;
 }
 
 type AppleRequestContextFactory = (cookies: Cookie[]) => Promise<APIRequestContext>;
@@ -319,11 +318,14 @@ export class PlaywrightAppleApiSession implements AppleApiSession {
   private readonly requestTimeoutMs: number;
   private readonly maxAttempts: number;
   private readonly baseRetryDelayMs: number;
+  private readonly rateLimitCooldownMs: number;
+  private readonly onRateLimitCooldown?: (cooldownMs: number) => void;
   private readonly onRequest?: (metric: AppleApiRequestMetric) => void;
   private requestCount = 0;
   private retryCount = 0;
   private activeRequestCount = 0;
   private idleResolvers: Array<() => void> = [];
+  private consecutiveRateLimitActive = false;
   private closing = false;
   private closed = false;
   private closePromise: Promise<void> | undefined;
@@ -341,6 +343,8 @@ export class PlaywrightAppleApiSession implements AppleApiSession {
     this.requestTimeoutMs = options.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
     this.maxAttempts = options.maxAttempts ?? DEFAULT_MAX_ATTEMPTS;
     this.baseRetryDelayMs = options.baseRetryDelayMs ?? DEFAULT_RETRY_DELAY_MS;
+    this.rateLimitCooldownMs = options.rateLimitCooldownMs ?? DEFAULT_RATE_LIMIT_COOLDOWN_MS;
+    this.onRateLimitCooldown = options.onRateLimitCooldown;
     this.onRequest = options.onRequest;
     this.scheduler = new RequestStartScheduler(options.minRequestIntervalMs ?? DEFAULT_REQUEST_INTERVAL_MS, {
       randomPauseMinMs: options.randomPauseEnabled ? options.randomPauseMinMs : 0,
@@ -458,6 +462,7 @@ export class PlaywrightAppleApiSession implements AppleApiSession {
                     const retryAfterMs = parseRetryAfter(response.headers()["retry-after"]);
                     throw new AppleApiError(status, `Apple Music API ${status}: ${text.slice(0, 200)}`, retryAfterMs);
                   }
+                  this.consecutiveRateLimitActive = false;
                   return JSON.parse(text) as T;
                 } finally {
                   await response.dispose().catch(() => {});
@@ -474,6 +479,19 @@ export class PlaywrightAppleApiSession implements AppleApiSession {
               return value;
             } catch (error) {
               status = error instanceof AppleApiError ? error.status : status;
+              if (status === 429) {
+                if (!this.consecutiveRateLimitActive) {
+                  this.consecutiveRateLimitActive = true;
+                  this.scheduler.deferNextStart(this.rateLimitCooldownMs);
+                  try {
+                    this.onRateLimitCooldown?.(this.rateLimitCooldownMs);
+                  } catch {
+                    // Diagnostics must not change request behavior.
+                  }
+                }
+              } else {
+                this.consecutiveRateLimitActive = false;
+              }
               this.onRequest?.({
                 operation,
                 attempt,
@@ -492,15 +510,18 @@ export class PlaywrightAppleApiSession implements AppleApiSession {
             shouldRetry: (error, attempt) => isRetryable(error, attempt, operation),
             beforeRetry: async (error, attempt) => {
               if (error instanceof AppleRequestContextClosedError) {
-                await this.recoverRequestContext(error.requestContext);
+                await this.recoverRequestContext(error.requestContext).catch(() => {});
                 return;
               }
 
               if (error instanceof AppleApiError && error.status === 401) {
-                this.developerToken = await refreshDeveloperToken(
+                const refreshedToken = await refreshDeveloperToken(
                   await this.readCookies(this.requestContext),
                   this.developerToken
-                );
+                ).catch(() => undefined);
+                if (refreshedToken) {
+                  this.developerToken = refreshedToken;
+                }
                 return;
               }
 

@@ -27,12 +27,12 @@
   },
   "matching": {
     "title": "匹配",
-    "description": "运行匹配时，nq2am 会为每首源歌曲搜索 Apple Music、给候选项打分，并在最高分达到匹配阈值时直接选择该候选项。更改会在下次运行或重试匹配时生效。",
+    "description": "运行匹配时，nq2am 会保留 Apple Music 返回的原始排名，并仅在排名第一的结果达到匹配阈值时自动选择。更改会在下次运行或重试匹配时生效。",
     "loading": "正在加载匹配偏好…",
     "threshold": {
       "label": "匹配阈值：",
       "help": "调高更安全，但会有更多歌曲进入未找到。",
-      "tooltip": "每个候选项会根据标题、艺术家、时长和版本线索得到一个分数。如果最高分低于这个值，就不会自动选择；这首歌会变成未找到，并保留候选项供之后复核。"
+      "tooltip": "每个候选项会根据标题、艺术家、时长和版本线索得到一个置信分数。如果 Apple Music 排名第一的结果低于这个值，就不会自动选择；这首歌会变成未找到，并按 Apple 原始排名保留候选项供之后复核。"
     },
     "explicit": {
       "label": "显式 / 干净版本偏好",
@@ -50,13 +50,13 @@
       "help": "除非 Apple Music 账号区域检测错了，否则建议留空。",
       "tooltip": "这是创建最终 Apple Music 歌单时使用的账号区域，例如 us、jp、cn。"
     },
-    "preferDuration": "优先选择时长最接近源歌曲的候选项",
-    "preferDurationTooltip": "当 Apple Music 候选项的时长接近源歌曲时，会给它一个小加分。约 2 秒以内加分最明显，差距到约 30 秒时加分消失。",
-    "preferOriginal": "优先选择原始录音室版本，而非重制 / 现场 / 卡拉OK 版本",
-    "preferOriginalTooltip": "如果候选标题看起来是 remaster、live、karaoke、instrumental、cover、version 或 remix，会扣一点分；但如果源歌曲标题本身也写了这个版本，就不会惩罚。",
+    "preferDuration": "在置信评分中使用歌曲时长",
+    "preferDurationTooltip": "当 Apple Music 候选项的时长接近源歌曲时，会提高置信分数。此分数只用于判断排名第一的结果是否达到阈值，不会改变 Apple 原始排名。",
+    "preferOriginal": "在置信评分中检查重制 / 现场 / 卡拉OK 等版本线索",
+    "preferOriginalTooltip": "如果候选标题看起来是 remaster、live、karaoke、instrumental、cover、version 或 remix，会降低置信分数；这不会改变 Apple 原始排名。",
     "performance": {
       "title": "性能与请求节奏",
-      "description": "这些参数会用于新的匹配、重试、跨区歌曲解析和创建歌单。",
+      "description": "这些参数会用于新的匹配、重试、跨区歌曲解析和创建歌单。首次出现连续 429 时会全局暂停 5 秒；请求失败会自动重试 3 次，全部失败后才报告请求失败。",
       "concurrency": {
         "label": "并行处理歌曲数",
         "help": "范围：1–10。",
@@ -70,12 +70,7 @@
       "requestTimeout": {
         "label": "Apple 请求超时",
         "help": "每一次请求尝试独立计算。",
-        "tooltip": "目录请求超过这个时间后会被视为临时失败，并按照最大尝试次数决定是否重试。"
-      },
-      "maxAttempts": {
-        "label": "最大尝试次数",
-        "help": "包含第一次请求。",
-        "tooltip": "遇到限流、临时服务器错误或网络超时时允许的总尝试次数。例如 3 表示第一次请求加最多两次重试。"
+        "tooltip": "目录请求超过这个时间后会被视为失败，并自动重试 3 次；4 次尝试全部失败后才报告请求失败。"
       },
       "retryDelay": {
         "label": "初始重试等待",

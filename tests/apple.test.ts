@@ -166,7 +166,7 @@ test("Apple Music matcher normalizes exact metadata score and records breakdown"
   assert.equal(breakdown.fields.duration, 1);
 });
 
-test("Apple Music matcher scores source-album candidates above same-title wrong albums", async () => {
+test("Apple Music matcher preserves Apple ranking even when a later candidate scores higher", async () => {
   const { matchSingleTrack } = await loadMatcherModule();
   const result = await matchSingleTrack(
     {
@@ -185,7 +185,11 @@ test("Apple Music matcher scores source-album candidates above same-title wrong 
   );
 
   assert.equal(result.status, "matched");
-  assert.equal(result.selectedId, "source-album");
+  assert.equal(result.selectedId, "wrong-album");
+  assert.deepEqual(
+    result.candidates?.map((candidate) => candidate.id),
+    ["wrong-album", "source-album"]
+  );
   const sourceAlbum = result.candidates?.find((c) => c.id === "source-album");
   const wrongAlbum = result.candidates?.find((c) => c.id === "wrong-album");
   assert.ok(sourceAlbum && wrongAlbum);
@@ -253,7 +257,7 @@ test("Apple Music matcher allows requested off-vocal versions", async () => {
       durationMs: 180_000,
       source: { provider: "qq", raw: {} }
     },
-    [appleSongWith("plain", { name: "Song" }), appleSongWith("off-vocal", { name: "Song (Off Vocal)" })],
+    [appleSongWith("off-vocal", { name: "Song (Off Vocal)" }), appleSongWith("plain", { name: "Song" })],
     "us",
     DEFAULT_MATCH_PREFERENCES
   );
@@ -273,17 +277,17 @@ test("Apple Music matcher treats feat annotations as credits, not title or album
       source: { provider: "netease", raw: {} }
     },
     [
-      appleSongWith("download", {
-        name: "初音ミクの消失",
-        artistName: "cosMo@暴走P feat.石川綾子",
-        albumName: "Download (feat.初音ミク)",
-        durationMs: 289_000
-      }),
       appleSongWith("single", {
         name: "初音ミクの消失 (feat. 初音ミク)",
         artistName: "cosMo@暴走P",
         albumName: "初音ミクの消失 (feat. 初音ミク)",
         durationMs: 292_000
+      }),
+      appleSongWith("download", {
+        name: "初音ミクの消失",
+        artistName: "cosMo@暴走P feat.石川綾子",
+        albumName: "Download (feat.初音ミク)",
+        durationMs: 289_000
       })
     ],
     "jp",

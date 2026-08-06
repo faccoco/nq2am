@@ -20,10 +20,8 @@ import {
 } from "./api.js";
 import { mapWithConcurrency } from "./concurrency.js";
 import { describeAppleRequestFailure } from "./requestFailure.js";
+import { runWithRetry } from "./requestScheduler.js";
 import { scoreAppleSong } from "./scoring.js";
-
-/** Number of candidates kept per track so the user can override the pick. */
-const MAX_CANDIDATES = 8;
 
 export type AppleMatchLogEvent = {
   event: "request" | "stage" | "job_complete";
@@ -49,9 +47,10 @@ export type AppleMatchExecutionOptions = {
 function requestFailedResult(
   track: NormalizedTrack,
   error: unknown,
-  operation: "session" | "search"
+  operation: "session" | "search",
+  attempts?: number
 ): AppleMatchResult {
-  const { reason, requestFailure } = describeAppleRequestFailure(error, { operation });
+  const { reason, requestFailure } = describeAppleRequestFailure(error, { operation, attempts });
   return {
     track,
     status: "request_failed",
@@ -93,7 +92,7 @@ function apiSessionOptions(
   return {
     requestTimeoutMs: prefs.appleRequestTimeoutMs,
     minRequestIntervalMs: prefs.appleRequestIntervalMs,
-    maxAttempts: prefs.appleMaxAttempts,
+    maxAttempts: DEFAULT_MATCH_PREFERENCES.appleMaxAttempts,
     baseRetryDelayMs: prefs.appleRetryBaseDelayMs,
     randomPauseEnabled: prefs.appleRandomPauseEnabled,
     randomPauseMinMs: prefs.appleRandomPauseMinMs,
@@ -177,16 +176,6 @@ function shouldRefreshExistingCandidates(result: AppleMatchResult): result is Ap
   return result.status === "ambiguous" || result.status === "not_found";
 }
 
-/** Ordering preference for explicit/clean when scores are otherwise equal. */
-function explicitRank(candidate: AppleCandidate, prefs: MatchPreferences): number {
-  if (prefs.explicitPreference === "none") return 0;
-  if (prefs.explicitPreference === "explicit") {
-    return candidate.contentRating === "explicit" ? 1 : 0;
-  }
-  // prefer clean
-  return candidate.contentRating === "clean" ? 1 : 0;
-}
-
 function matchedResult(
   track: NormalizedTrack,
   candidates: AppleCandidate[],
@@ -206,12 +195,9 @@ function matchedResult(
 }
 
 /**
- * Score every search result, then decide a status by score alone:
- * - no results, or best below `threshold` → `not_found`
- * - otherwise → `matched` (best)
- *
- * Candidates are ranked by score (with the explicit/clean preference as a
- * deterministic ordering hint for equal scores).
+ * Keep Apple Music search results in their original order. The first result is
+ * the automatic selection when its confidence score reaches the threshold;
+ * later results remain available for manual review without local re-ranking.
  */
 export async function matchSingleTrack(
   track: NormalizedTrack,
@@ -224,24 +210,23 @@ export async function matchSingleTrack(
   }
 
   const candidates = results.map((song) => toCandidate(song, scoreAppleSong(track, song, prefs), storefront));
-  const ranked = [...candidates].sort((a, b) => {
-    if (b.score !== a.score) return b.score - a.score;
-    return explicitRank(b, prefs) - explicitRank(a, prefs);
-  });
-  const scored = ranked.slice(0, MAX_CANDIDATES);
+  const topResult = candidates[0];
 
-  const best = scored[0];
-
-  if (best.score < prefs.threshold) {
+  if (topResult.score < prefs.threshold) {
     return {
       track,
       status: "not_found",
-      candidates: scored,
-      reason: `Best match score ${best.score.toFixed(2)} below threshold ${prefs.threshold.toFixed(2)}`
+      candidates,
+      reason: `Top Apple Music result score ${topResult.score.toFixed(2)} below threshold ${prefs.threshold.toFixed(2)}`
     };
   }
 
-  return matchedResult(track, scored, best, `Selected best match (score ${best.score.toFixed(2)})`);
+  return matchedResult(
+    track,
+    candidates,
+    topResult,
+    `Selected Apple Music top result (score ${topResult.score.toFixed(2)})`
+  );
 }
 
 /**
@@ -316,20 +301,29 @@ export async function matchAppleMusic(
   const jobStartedAt = performance.now();
   const jobId = playlist.id;
   let session: AppleApiSession;
+  let sessionAttempts = 0;
   const sessionStartedAt = performance.now();
   try {
-    session = await sessionFactory(
-      apiSessionOptions(prefs, (metric) => {
-        logger({
-          event: "request",
-          jobId,
-          durationMs: Math.round(metric.durationMs * 100) / 100,
-          operation: metric.operation,
-          attempt: metric.attempt,
-          outcome: metric.outcome,
-          status: metric.status
-        });
-      })
+    const options = apiSessionOptions(prefs, (metric) => {
+      logger({
+        event: "request",
+        jobId,
+        durationMs: Math.round(metric.durationMs * 100) / 100,
+        operation: metric.operation,
+        attempt: metric.attempt,
+        outcome: metric.outcome,
+        status: metric.status
+      });
+    });
+    session = await runWithRetry(
+      async () => {
+        sessionAttempts += 1;
+        return sessionFactory(options);
+      },
+      {
+        maxAttempts: DEFAULT_MATCH_PREFERENCES.appleMaxAttempts,
+        shouldRetry: () => true
+      }
     );
     logger({
       event: "stage",
@@ -351,7 +345,7 @@ export async function matchAppleMusic(
       playlistId: playlist.id,
       playlistName: playlist.name,
       results: playlist.tracks.map((track) => ({
-        ...requestFailedResult(track, error, "session")
+        ...requestFailedResult(track, error, "session", sessionAttempts)
       }))
     };
   }

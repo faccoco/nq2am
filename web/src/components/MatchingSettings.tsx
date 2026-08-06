@@ -12,7 +12,7 @@ const DEFAULTS: MatchPreferences = {
   matchConcurrency: 3,
   appleRequestIntervalMs: 150,
   appleRequestTimeoutMs: 15_000,
-  appleMaxAttempts: 3,
+  appleMaxAttempts: 4,
   appleRetryBaseDelayMs: 750,
   appleRandomPauseEnabled: true,
   appleRandomPauseMinMs: 250,
@@ -113,33 +113,6 @@ export default function MatchingSettings() {
         </label>
 
         <label className="flex flex-col gap-1 text-sm text-slate-300">
-          <FieldTitle tooltip={t("matching.explicit.tooltip")}>
-            {t("matching.explicit.label")}
-          </FieldTitle>
-          <select
-            value={prefs.explicitPreference}
-            onChange={(e) =>
-              patch({
-                explicitPreference: e.target
-                  .value as MatchPreferences["explicitPreference"],
-              })
-            }
-            className="rounded-md border border-slate-600 bg-slate-900 px-3 py-2 text-slate-100 focus:border-indigo-500 focus:outline-none"
-          >
-            <option value="none">{t("matching.explicit.options.none")}</option>
-            <option value="explicit">
-              {t("matching.explicit.options.explicit")}
-            </option>
-            <option value="clean">
-              {t("matching.explicit.options.clean")}
-            </option>
-          </select>
-          <span className="text-xs text-slate-500">
-            {t("matching.explicit.help")}
-          </span>
-        </label>
-
-        <label className="flex flex-col gap-1 text-sm text-slate-300">
           <FieldTitle tooltip={t("matching.storefront.tooltip")}>
             {t("matching.storefront.label")}
           </FieldTitle>
@@ -222,15 +195,6 @@ export default function MatchingSettings() {
             step={1_000}
             unit="ms"
             onChange={(value) => patch({ appleRequestTimeoutMs: value })}
-          />
-          <NumberPreference
-            label={t("matching.performance.maxAttempts.label")}
-            tooltip={t("matching.performance.maxAttempts.tooltip")}
-            help={t("matching.performance.maxAttempts.help")}
-            value={prefs.appleMaxAttempts}
-            min={1}
-            max={10}
-            onChange={(value) => patch({ appleMaxAttempts: value })}
           />
           <NumberPreference
             label={t("matching.performance.retryDelay.label")}

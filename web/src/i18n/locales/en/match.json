@@ -103,6 +103,7 @@
     "exact": "exact",
     "open": "open ↗",
     "score": "score {{score}}",
+    "appleRank": "Apple #{{rank}}",
     "explicit": "E"
   }
 }

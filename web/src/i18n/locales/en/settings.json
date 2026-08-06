@@ -27,12 +27,12 @@
   },
   "matching": {
     "title": "Matching",
-    "description": "When you run a match, nq2am searches Apple Music for each source track, scores the candidates, and selects the highest-scoring candidate when it reaches the match threshold. Changes apply the next time you run or retry a match.",
+    "description": "When you run a match, nq2am preserves Apple Music's original result ranking and auto-selects only the top-ranked result when it reaches the match threshold. Changes apply the next time you run or retry a match.",
     "loading": "Loading matching preferences…",
     "threshold": {
       "label": "Match threshold:",
       "help": "Higher is safer but sends more tracks to Not found.",
-      "tooltip": "Each candidate receives a score from title, artist, duration, and version hints. If the best score is below this value, it is not auto-selected; the track becomes not found with candidates kept for review."
+      "tooltip": "Each candidate receives a confidence score from title, artist, duration, and version hints. If Apple Music's top-ranked result is below this value, it is not auto-selected; the track becomes not found with candidates kept in Apple's original order for review."
     },
     "explicit": {
       "label": "Explicit / clean preference",
@@ -50,13 +50,13 @@
       "help": "Leave blank unless your Apple Music account region is detected wrong.",
       "tooltip": "This is the Apple Music account region used when creating the final playlist, such as us, jp, or cn."
     },
-    "preferDuration": "Prefer candidates whose duration is closest to the source track",
-    "preferDurationTooltip": "Adds a small score bonus when the Apple Music duration is close to the source track. The bonus is strongest within about 2 seconds and fades out by about 30 seconds.",
-    "preferOriginal": "Prefer original studio versions over remaster / live / karaoke",
-    "preferOriginalTooltip": "Applies a small penalty to candidates whose title looks like remaster, live, karaoke, instrumental, cover, version, or remix, unless the source title also asks for that version.",
+    "preferDuration": "Use track duration in the confidence score",
+    "preferDurationTooltip": "Raises confidence when the Apple Music duration is close to the source track. This score only determines whether the top-ranked result reaches the threshold; it never changes Apple's ranking.",
+    "preferOriginal": "Check remaster / live / karaoke version hints in the confidence score",
+    "preferOriginalTooltip": "Lowers confidence when a candidate title looks like a remaster, live, karaoke, instrumental, cover, version, or remix. This never changes Apple's ranking.",
     "performance": {
       "title": "Performance and request pacing",
-      "description": "These values apply to new matches, retries, cross-region song resolution, and playlist creation.",
+      "description": "These values apply to new matches, retries, cross-region song resolution, and playlist creation. The first 429 in a consecutive streak triggers a global five-second pause; failed catalog requests are retried three times before a request failure is reported.",
       "concurrency": {
         "label": "Parallel tracks",
         "help": "Range: 1–10.",
@@ -70,12 +70,7 @@
       "requestTimeout": {
         "label": "Apple request timeout",
         "help": "Applied separately to each request attempt.",
-        "tooltip": "A catalog request that takes longer than this is treated as a transient failure and may be retried according to the attempt limit."
-      },
-      "maxAttempts": {
-        "label": "Maximum attempts",
-        "help": "Includes the first request.",
-        "tooltip": "Total attempts allowed for rate limits, temporary server errors, and network timeouts. For example, 3 means one initial request plus at most two retries."
+        "tooltip": "A catalog request that takes longer than this is retried three times. A request failure is reported only after all four attempts fail."
       },
       "retryDelay": {
         "label": "Initial retry delay",

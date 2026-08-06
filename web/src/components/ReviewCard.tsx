@@ -164,10 +164,11 @@ export default function ReviewCard({
         </div>
       ) : (
         <div className="space-y-2">
-          {(r.candidates ?? []).map((c) => (
+          {(r.candidates ?? []).map((c, index) => (
             <CandidateCard
               key={c.id}
               candidate={c}
+              appleRank={index + 1}
               sourceDurationMs={r.track.durationMs}
               selected={r.selectedId === c.id}
               busy={busy}

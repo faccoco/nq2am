@@ -144,7 +144,7 @@ test("bounded retry stops after success and runs backoff hooks", async () => {
   assert.deepEqual(retries, [1, 2]);
 });
 
-test("Apple API exposes an exhausted rate limit as structured request failure", async () => {
+test("Apple API reports a request failure only after three automatic retries", async () => {
   const cookies: Cookie[] = [
     {
       name: "media-user-token",
@@ -163,12 +163,11 @@ test("Apple API exposes an exhausted rate limit as structured request failure", 
     () => {}
   );
   const requestOptions: AppleApiSessionOptions = {
-    maxAttempts: 2,
+    maxAttempts: 4,
     baseRetryDelayMs: 0,
-    minRequestIntervalMs: 150,
-    randomPauseEnabled: true,
-    randomPauseMinMs: 250,
-    randomPauseMaxMs: 750
+    rateLimitCooldownMs: 0,
+    minRequestIntervalMs: 0,
+    randomPauseEnabled: false
   };
   const originalRequestOptions = { ...requestOptions };
   const session = new PlaywrightAppleApiSession(
@@ -187,12 +186,50 @@ test("Apple API exposes an exhausted rate limit as structured request failure", 
       kind: "rate_limited",
       operation: "search",
       status: 429,
-      attempts: 2
+      attempts: 4
     });
     return true;
   });
-  assert.deepEqual(session.getStats(), { requestCount: 2, retryCount: 1 });
+  assert.deepEqual(session.getStats(), { requestCount: 4, retryCount: 3 });
   assert.deepEqual(requestOptions, originalRequestOptions);
+  await session.close();
+});
+
+test("the first consecutive 429 activates a five-second global cooldown", async () => {
+  const cookies: Cookie[] = [
+    {
+      name: "media-user-token",
+      value: "user-token",
+      domain: ".music.apple.com",
+      path: "/",
+      expires: -1,
+      httpOnly: true,
+      secure: true,
+      sameSite: "None"
+    }
+  ];
+  const cooldowns: number[] = [];
+  const context = fakeRequestContext(
+    async () => jsonResponse({ errors: [{ title: "Too Many Requests" }] }, 429),
+    cookies,
+    () => {}
+  );
+  const session = new PlaywrightAppleApiSession(
+    context,
+    cookies,
+    "user-token",
+    "developer-token",
+    {
+      maxAttempts: 1,
+      minRequestIntervalMs: 0,
+      onRateLimitCooldown: (cooldownMs) => cooldowns.push(cooldownMs)
+    },
+    async () => context,
+    async () => {}
+  );
+
+  await assert.rejects(session.search("Song", "us"), AppleRequestExecutionError);
+  assert.deepEqual(cooldowns, [5_000]);
   await session.close();
 });
 
@@ -704,7 +741,8 @@ test("matching closes the shared session after track failures", async () => {
   assert.equal(closeCount, 1);
 });
 
-test("matching marks a session initialization timeout as request failed", async () => {
+test("matching retries session initialization three times before reporting failure", async () => {
+  let sessionAttempts = 0;
   const playlist: NormalizedPlaylist = {
     provider: "qq",
     id: "failed-session",
@@ -721,14 +759,17 @@ test("matching marks a session initialization timeout as request failed", async 
   const report = await matchAppleMusic(playlist, DEFAULT_MATCH_PREFERENCES, undefined, {
     logger: () => {},
     sessionFactory: async () => {
+      sessionAttempts += 1;
       throw new Error("Timed out obtaining Apple Music developer token from the web player");
     }
   });
 
+  assert.equal(sessionAttempts, 4);
   assert.equal(report.results[0].status, "request_failed");
   assert.deepEqual(report.results[0].requestFailure, {
     kind: "timeout",
-    operation: "session"
+    operation: "session",
+    attempts: 4
   });
 });
 

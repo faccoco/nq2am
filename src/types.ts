@@ -82,7 +82,7 @@ export type AppleCandidate = {
 export type AppleMatchResult = {
   track: NormalizedTrack;
   status: AppleMatchStatus;
-  /** Top scored candidates (best first); kept so a user can override the pick. */
+  /** Apple Music search candidates in the exact order returned by the catalog. */
   candidates?: AppleCandidate[];
   /** The chosen candidate id (mirrors appleMusicId for the selected one). */
   selectedId?: string;
@@ -109,7 +109,7 @@ export type MatchPreferences = {
   threshold: number;
   /** Favor candidates whose duration is closest to the source track. */
   preferDurationMatch: boolean;
-  /** Tie-break preference when both explicit and clean versions exist. */
+  /** Legacy preference retained for stored-settings compatibility; candidate order always follows Apple Music. */
   explicitPreference: "explicit" | "clean" | "none";
   /** Prefer original/studio versions over remaster/live/karaoke/instrumental. */
   preferOriginalVersion: boolean;
@@ -121,7 +121,7 @@ export type MatchPreferences = {
   appleRequestIntervalMs: number;
   /** Timeout applied to each Apple catalog request. */
   appleRequestTimeoutMs: number;
-  /** Total attempts allowed for a transient Apple request failure. */
+  /** Legacy stored value; Apple catalog requests use four total attempts (three automatic retries). */
   appleMaxAttempts: number;
   /** Initial exponential-backoff delay after a transient failure. */
   appleRetryBaseDelayMs: number;
@@ -142,7 +142,7 @@ export const DEFAULT_MATCH_PREFERENCES: MatchPreferences = {
   matchConcurrency: 3,
   appleRequestIntervalMs: 150,
   appleRequestTimeoutMs: 15_000,
-  appleMaxAttempts: 3,
+  appleMaxAttempts: 4,
   appleRetryBaseDelayMs: 750,
   appleRandomPauseEnabled: true,
   appleRandomPauseMinMs: 250,

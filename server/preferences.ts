@@ -78,6 +78,9 @@ function validate(input: unknown): MatchPreferences {
     throw new PreferencesValidationError("ambiguousGap must be between 0 and 1");
   }
 
+  // Keep accepting the legacy setting, but matching now always uses one
+  // initial request plus exactly three automatic retries.
+  readNumber(p, "appleMaxAttempts", d.appleMaxAttempts, 1, 10, true);
   const randomPauseMinMs = readNumber(p, "appleRandomPauseMinMs", d.appleRandomPauseMinMs, 0, 60_000, true);
   const randomPauseMaxMs = readNumber(p, "appleRandomPauseMaxMs", d.appleRandomPauseMaxMs, 0, 60_000, true);
   if (randomPauseMinMs > randomPauseMaxMs) {
@@ -93,7 +96,7 @@ function validate(input: unknown): MatchPreferences {
     matchConcurrency: readNumber(p, "matchConcurrency", d.matchConcurrency, 1, 10, true),
     appleRequestIntervalMs: readNumber(p, "appleRequestIntervalMs", d.appleRequestIntervalMs, 0, 10_000, true),
     appleRequestTimeoutMs: readNumber(p, "appleRequestTimeoutMs", d.appleRequestTimeoutMs, 1_000, 120_000, true),
-    appleMaxAttempts: readNumber(p, "appleMaxAttempts", d.appleMaxAttempts, 1, 10, true),
+    appleMaxAttempts: d.appleMaxAttempts,
     appleRetryBaseDelayMs: readNumber(p, "appleRetryBaseDelayMs", d.appleRetryBaseDelayMs, 0, 60_000, true),
     appleRandomPauseEnabled: readBoolean(p, "appleRandomPauseEnabled", d.appleRandomPauseEnabled),
     appleRandomPauseMinMs: randomPauseMinMs,

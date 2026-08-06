@@ -52,6 +52,16 @@ test("legacy preferences receive configurable Apple request settings", async () 
   assert.equal(prefs.appleRandomPauseEnabled, true);
 });
 
+test("legacy request-attempt settings migrate to three automatic retries", async () => {
+  const { setPreferences } = await import("../server/preferences.js");
+  const prefs = await setPreferences({
+    ...DEFAULT_MATCH_PREFERENCES,
+    appleMaxAttempts: 1
+  });
+
+  assert.equal(prefs.appleMaxAttempts, 4);
+});
+
 test("an explicitly disabled random pause remains disabled", async () => {
   const { setPreferences } = await import("../server/preferences.js");
   const prefs = await setPreferences({

@@ -4,6 +4,7 @@ import type { AppleCandidate } from "../types";
 
 type Props = {
   candidate: AppleCandidate;
+  appleRank: number;
   sourceDurationMs?: number;
   selected: boolean;
   onChoose: () => void;
@@ -12,6 +13,7 @@ type Props = {
 
 export default function CandidateCard({
   candidate,
+  appleRank,
   sourceDurationMs,
   selected,
   onChoose,
@@ -41,6 +43,9 @@ export default function CandidateCard({
 
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
+          <span className="flex-shrink-0 rounded bg-slate-700 px-1.5 py-0.5 text-[10px] font-semibold text-slate-300">
+            {t("candidate.appleRank", { rank: appleRank })}
+          </span>
           <span className="truncate text-sm font-medium text-slate-100">
             {candidate.name}
           </span>
