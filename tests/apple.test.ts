@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import type { AppleSong } from "../src/apple/api.js";
-import type { AppleContentRating, MatchPreferences, NormalizedPlaylist, NormalizedTrack } from "../src/types.js";
+import type { AppleContentRating, NormalizedPlaylist, NormalizedTrack } from "../src/types.js";
 import { DEFAULT_MATCH_PREFERENCES } from "../src/types.js";
 
 process.env.NQ2AM_DATA_DIR = mkdtempSync(join(tmpdir(), "nq2am-test-"));
@@ -68,16 +68,6 @@ function appleSongWith(
       artwork: attrs.artworkUrl ? { url: attrs.artworkUrl } : undefined,
       contentRating: attrs.contentRating
     }
-  };
-}
-
-function tiePrefs(): MatchPreferences {
-  return {
-    ...DEFAULT_MATCH_PREFERENCES,
-    threshold: 0.7,
-    ambiguousGap: 0.1,
-    preferDurationMatch: false,
-    explicitPreference: "none"
   };
 }
 
@@ -154,7 +144,7 @@ test("Apple Music matcher scores source-album candidates above same-title wrong 
       appleSongWith("source-album", { albumName: "Source Album" })
     ],
     "us",
-    { ...DEFAULT_MATCH_PREFERENCES, ambiguousGap: 0.01 }
+    DEFAULT_MATCH_PREFERENCES
   );
 
   assert.equal(result.status, "matched");
@@ -184,7 +174,7 @@ test("Apple Music matcher keeps text identity stronger than duration", async () 
       })
     ],
     "us",
-    { ...DEFAULT_MATCH_PREFERENCES, ambiguousGap: 0.01 }
+    DEFAULT_MATCH_PREFERENCES
   );
 
   assert.equal(result.status, "matched");
@@ -330,7 +320,7 @@ test("Apple Music matcher treats Apple single album suffixes as the source album
   assert.equal(winner.scoreBreakdown?.fields.album, 1);
 });
 
-test("Apple Music matcher keeps ambiguity for indistinguishable candidates", async () => {
+test("Apple Music matcher selects the first-ranked indistinguishable candidate", async () => {
   const { matchSingleTrack } = await loadMatcherModule();
   const result = await matchSingleTrack(
     {
@@ -340,11 +330,11 @@ test("Apple Music matcher keeps ambiguity for indistinguishable candidates", asy
     },
     [appleSong("a", cover("blue")), appleSong("b", cover("red"))],
     "us",
-    tiePrefs()
+    DEFAULT_MATCH_PREFERENCES
   );
 
-  assert.equal(result.status, "ambiguous");
-  assert.equal(result.selectedId, undefined);
+  assert.equal(result.status, "matched");
+  assert.equal(result.selectedId, "a");
 });
 
 test("Apple Music retry only replaces not-found results", async () => {
@@ -505,7 +495,7 @@ test("Apple Music retry replaces request failures with fresh semantic results", 
 
   assert.deepEqual(
     report.results.map((result) => result.status),
-    ["matched", "ambiguous", "not_found", "request_failed"]
+    ["matched", "matched", "not_found", "request_failed"]
   );
   assert.equal(report.results[0].requestFailure, undefined);
   assert.equal(report.results[2].reason, "No results from Apple Music search");

@@ -112,7 +112,6 @@ export type MatchReviewTab = "all" | "ambiguous" | "not_found" | "request_failed
 
 export type MatchPreferences = {
   threshold: number;
-  ambiguousGap: number;
   preferDurationMatch: boolean;
   explicitPreference: "explicit" | "clean" | "none";
   preferOriginalVersion: boolean;

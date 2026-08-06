@@ -42,9 +42,10 @@ async function invokePutPreferences(body: unknown) {
 
 test("legacy preferences receive configurable Apple request settings", async () => {
   const { setPreferences } = await import("../server/preferences.js");
-  const prefs = await setPreferences({ threshold: 0.8 });
+  const prefs = await setPreferences({ threshold: 0.8, ambiguousGap: 0.1 });
 
   assert.equal(prefs.threshold, 0.8);
+  assert.equal("ambiguousGap" in prefs, false);
   assert.equal(prefs.matchConcurrency, DEFAULT_MATCH_PREFERENCES.matchConcurrency);
   assert.equal(prefs.appleRequestIntervalMs, DEFAULT_MATCH_PREFERENCES.appleRequestIntervalMs);
   assert.equal(prefs.appleRequestTimeoutMs, DEFAULT_MATCH_PREFERENCES.appleRequestTimeoutMs);

@@ -107,8 +107,6 @@ export type AppleMatchReport = {
 export type MatchPreferences = {
   /** Minimum score for an automatic match (0–1). */
   threshold: number;
-  /** If best − secondBest < this, the match is ambiguous. */
-  ambiguousGap: number;
   /** Favor candidates whose duration is closest to the source track. */
   preferDurationMatch: boolean;
   /** Tie-break preference when both explicit and clean versions exist. */
@@ -137,7 +135,6 @@ export type MatchPreferences = {
 
 export const DEFAULT_MATCH_PREFERENCES: MatchPreferences = {
   threshold: 0.7,
-  ambiguousGap: 0.1,
   preferDurationMatch: true,
   explicitPreference: "none",
   preferOriginalVersion: true,

@@ -180,15 +180,6 @@ function explicitRank(candidate: AppleCandidate, prefs: MatchPreferences): numbe
   return candidate.contentRating === "clean" ? 1 : 0;
 }
 
-function scoreGapReason(best: AppleCandidate, second: AppleCandidate | undefined, prefs: MatchPreferences): string {
-  if (!second) {
-    return `score ${best.score.toFixed(2)}`;
-  }
-
-  const gap = best.score - second.score;
-  return `best ${best.score.toFixed(2)} vs second ${second.score.toFixed(2)}; gap ${gap.toFixed(2)} / required ${prefs.ambiguousGap.toFixed(2)}`;
-}
-
 function matchedResult(
   track: NormalizedTrack,
   candidates: AppleCandidate[],
@@ -210,7 +201,6 @@ function matchedResult(
 /**
  * Score every search result, then decide a status by score alone:
  * - no results, or best below `threshold` → `not_found`
- * - best within `ambiguousGap` of the runner-up → `ambiguous`
  * - otherwise → `matched` (best)
  *
  * Candidates are ranked by score (with the explicit/clean preference as a
@@ -234,28 +224,17 @@ export async function matchSingleTrack(
   const scored = ranked.slice(0, MAX_CANDIDATES);
 
   const best = scored[0];
-  const second = scored[1];
 
   if (best.score < prefs.threshold) {
     return {
       track,
       status: "not_found",
       candidates: scored,
-      reason: `Best match score ${best.score.toFixed(2)} below threshold ${prefs.threshold.toFixed(2)} (${scoreGapReason(best, second, prefs)})`
+      reason: `Best match score ${best.score.toFixed(2)} below threshold ${prefs.threshold.toFixed(2)}`
     };
   }
 
-  const isTie = second !== undefined && best.score - second.score < prefs.ambiguousGap;
-  if (isTie) {
-    return {
-      track,
-      status: "ambiguous",
-      candidates: scored,
-      reason: `Multiple close matches (${scoreGapReason(best, second, prefs)})`
-    };
-  }
-
-  return matchedResult(track, scored, best, `Selected best match (${scoreGapReason(best, second, prefs)})`);
+  return matchedResult(track, scored, best, `Selected best match (score ${best.score.toFixed(2)})`);
 }
 
 /**
@@ -480,8 +459,8 @@ export async function retryAppleMusicResults(
 }
 
 /**
- * Re-score the candidates of ambiguous / not-found results (e.g. after a
- * preference change) and merge any changed results back into the report.
+ * Re-score the candidates of legacy ambiguous / not-found results (e.g. after
+ * a preference change) and merge any changed results back into the report.
  */
 export async function refreshAppleMatchReportCandidates(
   report: AppleMatchReport,

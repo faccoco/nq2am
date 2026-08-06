@@ -11,41 +11,42 @@
 
 ---
 
-## ✅ [已删除] 匹配算法进一步瘦身（查询词、级联裁决、平局打破、封面相似度、ISRC 跨店桥接）
+## ✅ [已删除] 匹配算法进一步瘦身（查询词、级联裁决、歧义间隔、平局打破、封面相似度、ISRC 跨店桥接）
 
 **时间**：本次会话
-**动机**：把匹配算法降到最简——只用曲名检索，按分数（阈值 + 歧义间隔）裁定状态，去掉所有“启发式选冠军”的旁路。
+**动机**：把匹配算法降到最简——只用曲名检索，按单一分数阈值裁定状态，去掉所有“启发式选冠军”和近分转人工复核的旁路。
 
 ### 删除的机制
 
 1. **查询词拼接**：不再用「曲名 + 首位歌手」拼查询，`processTrack` 直接拿 `track.originalName` 去 Apple 搜索。
 2. **级联裁决**：删除阈值下的时长兜底（`chooseByDurationSimilarity`）、不可区分重复选择（`chooseIndistinguishableDuplicate`）、专辑相似度选择（`chooseByAlbumSimilarity`）。以及配套的 `hasEquivalentDuration`/`isEquivalentCandidate`/`matchesSourceAlbum`/`retainCandidates`/`sharedRecordingIsrc`。
-3. **平局打破**：`matchSingleTrack` 不再有 `isTie` 解决块（显式/干净偏好、共享 ISRC、时长、封面决胜）。接近的分数直接判为 `ambiguous` 交人工复核。`explicitRank` 仅保留作排序时的等分定序提示。
+3. **歧义间隔与平局打破**：删除最高分与次高分的近分判断；最高分达到 `threshold` 后直接选中排序第一的候选，不再产生新的 `ambiguous` 结果。对应的 `ambiguousGap` 偏好已从 types/server/web/i18n 移除；服务端仅兼容读取并丢弃旧配置。`explicitRank` 仅保留作分数完全相同时的确定性排序提示。`ambiguous` 状态仍保留，用于读取和刷新历史报告。
 4. **封面相似度**：整个 `src/apple/artwork.ts` 删除（`ArtworkComparator`/`createArtworkComparator`/`chooseByCoverSimilarity`/`CandidateSimilarity`）；`matchSingleTrack` 不再接收 `chooseCover`；移除 `artworkComparatorFactory`、`artwork` 阶段日志、`artworkTimeoutMs` 偏好（types/server/web/i18n/tests）。
 5. **ISRC 跨店桥接**：删除 `resolveCandidateId`、`AppleApiSession.songsByIsrc` 与 `appleSongsByIsrc` 导出；`resolveAppleMusicTrackIds` 改为同步、直接收集已匹配候选 id（不再需要 session/storefront/concurrency）；`createAppleMusicPlaylistFromReport` 不再探测 accountStore。`AppleCandidate.addableId` 字段移除；`AppleRequestOperation` 去掉 `"isrc"`；`mergePreservedCandidateFields` 删除。
 
 ### `matchSingleTrack` 现在的逻辑
 
-分数 → 排序 → 取前 N：无结果或最高分 < `threshold` → `not_found`；最高分与次高分差距 < `ambiguousGap` → `ambiguous`；否则 → `matched`（最高分）。
+分数 → 排序 → 取前 N：无结果或最高分 < `threshold` → `not_found`；否则 → `matched`（最高分）。前两名分差不再参与裁决。
 
 ### 受影响的文件
 
 - 代码：`src/apple/matcher.ts`（重写决策部分）、`src/apple/api.ts`、`src/apple/artwork.ts`（删）、`src/types.ts`、`src/index.ts`。
 - 偏好/UI：`server/preferences.ts`、`web/src/types.ts`、`web/src/components/MatchingSettings.tsx`、`web/src/i18n/locales/{en,zh}/settings.json`、`web/src/i18n/locales/{en,zh}/match.json`（上一轮已理）。
-- 用户可见文案修正：`ambiguityGap` tooltip 不再提“显式/干净 + 封面相似度”决胜；`src/types.ts` isrc 注释去掉“用于跨店桥接”。
-- spec：`openspec/specs/apple-match-request-failure-handling/spec.md` 删除已不可能触发的「封面比较超时」场景。
-- 测试：删 `tests/real-songs.test.ts` + `tests/fixtures/real-songs-same-recording.json`（为旧专辑相似度 GT 而设的回归周定）、`package.json` 的 `test:real` 脚本；重写/精简 `tests/apple.test.ts`、`tests/apple-performance.test.ts` 中依赖已删机制的用例。
+- 用户可见文案修正：删除歧义间隔设置及其 tooltip；匹配说明改为“最高分过阈值即选中”；`src/types.ts` isrc 注释去掉“用于跨店桥接”。
+- spec：`openspec/specs/apple-match-request-failure-handling/spec.md` 删除已不可能触发的「封面比较超时」场景，并把成功重试结果收窄为 `matched | not_found`。
+- 测试：删 `tests/real-songs.test.ts` + `tests/fixtures/real-songs-same-recording.json`（为旧专辑相似度 GT 而设的回归周定）、`package.json` 的 `test:real` 脚本；重写/精简 `tests/apple.test.ts`、`tests/apple-performance.test.ts` 中依赖已删机制的用例，并覆盖零分差候选也直接选中第一名。
 
 ### 保留
 
-- `threshold` / `ambiguousGap` / `explicitPreference`（仅排序定序）/ 评分体系（title/artist/album/duration/version）/ 请求调度与重试 / `refreshAppleMatchReportCandidates`（重算候选）/ `retry*` / `candidate.storefront` 与 `candidate.isrc`（仅作元数据，CandidateCard 仍可展示 storefront 徽标；现在恒为账号区）。
+- `threshold` / `explicitPreference`（仅等分排序定序）/ 评分体系（title/artist/album/duration/version）/ 请求调度与重试 / `refreshAppleMatchReportCandidates`（重算候选）/ `retry*` / `candidate.storefront` 与 `candidate.isrc`（仅作元数据，CandidateCard 仍可展示 storefront 徽标；现在恒为账号区）。
+- `ambiguous` 状态与对应复核 UI 仅为历史报告兼容保留；新的自动匹配不会再产出该状态。
 
 ### 验证
 
 - `pnpm run typecheck` ✅（含 web `tsc --noEmit`）
-- `pnpm run lint` ✅（41 files）
-- `pnpm run test` ✅（68 tests pass）
-- 全仓 `rg` 残留检查 ✅（仅剩合法的 `artworkUrl`/`artwork` 展示用封面 URL，以及 openspec 历史变更文档）
+- `pnpm run lint` ✅（43 files）
+- `pnpm run test` ✅（74 tests pass）
+- 全仓 `rg` 残留检查 ✅（仅剩合法的封面 URL 展示、旧 `ambiguousGap` 配置迁移兼容，以及 openspec 历史变更文档）
 
 ### 备注
 
@@ -84,7 +85,7 @@
 
 ### 行为变化
 
-非英文音轨不再去母语区先搜。匹配统一在账号 storefront 进行：`accountStore` 由 `prefs.storefront` 指定，留空时自动探测。`threshold`/`ambiguousGap`/封面相似度等其余裁决逻辑不变。
+非英文音轨不再去母语区先搜。匹配统一在账号 storefront 进行：`accountStore` 由 `prefs.storefront` 指定，留空时自动探测。该步骤完成时其余裁决逻辑未变；歧义间隔与封面相似度后来在“匹配算法进一步瘦身”阶段删除。
 
 ### 备注
 
@@ -121,9 +122,9 @@
 - `pnpm run lint` ✅（44 files, no fixes）
 - 全仓 `rg` 残留引用检查 ✅ 无残留
 
-### 现在的匹配行为（v1）
+### 回退完成时的匹配行为（v1，随后继续简化）
 
-候选级单阈值评分：每个 Apple 候选独立按 title/artist/album/duration/version 加权打分，最高分过 `threshold` 且领先第二名 ≥ `ambiguousGap` 则 `matched`，否则 `ambiguous`/`not_found`。状态集合为 `not_implemented | matched | not_found | ambiguous | request_failed`（无 `score_rejected`）。
+每个 Apple 候选独立按 title/artist/album/duration/version 加权打分；当时仍要求最高分过 `threshold` 且与第二名保持足够分差。后续“匹配算法进一步瘦身”已删除分差裁决，当前只保留单阈值判断。状态集合仍兼容 `not_implemented | matched | not_found | ambiguous | request_failed`（无 `score_rejected`）。
 
 ### 备注
 

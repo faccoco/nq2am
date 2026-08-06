@@ -27,17 +27,12 @@
   },
   "matching": {
     "title": "Matching",
-    "description": "When you run a match, nq2am searches Apple Music for each source track, scores the candidates, then auto-selects only clear winners. Uncertain tracks go to Ambiguous or Not found. Changes apply the next time you run or retry a match.",
+    "description": "When you run a match, nq2am searches Apple Music for each source track, scores the candidates, and selects the highest-scoring candidate when it reaches the match threshold. Changes apply the next time you run or retry a match.",
     "loading": "Loading matching preferences…",
     "threshold": {
       "label": "Match threshold:",
-      "help": "Higher is safer but sends more tracks to review or not found.",
+      "help": "Higher is safer but sends more tracks to Not found.",
       "tooltip": "Each candidate receives a score from title, artist, duration, and version hints. If the best score is below this value, it is not auto-selected; the track becomes not found with candidates kept for review."
-    },
-    "ambiguityGap": {
-      "label": "Ambiguity gap:",
-      "help": "Higher means close choices are reviewed instead of auto-picked.",
-      "tooltip": "After the best candidate passes the threshold, nq2am compares it with the second-best score. If best minus second-best is smaller than this gap, the track goes to Ambiguous for manual review."
     },
     "explicit": {
       "label": "Explicit / clean preference",
@@ -46,8 +41,8 @@
         "explicit": "Prefer explicit",
         "clean": "Prefer clean"
       },
-      "help": "Only used as a tie-breaker for close candidates.",
-      "tooltip": "This does not filter search results. It only chooses between otherwise close explicit and clean versions before the match falls back to cover comparison or manual review."
+      "help": "Only used to order candidates with equal scores.",
+      "tooltip": "This does not filter search results. It only orders otherwise equally scored explicit and clean versions."
     },
     "storefront": {
       "label": "Storefront",

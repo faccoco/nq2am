@@ -61,7 +61,7 @@ The system SHALL allow request-failed tracks to be retried as an independent ret
 
 #### Scenario: Retry succeeds
 - **WHEN** a request-failed track receives a successful Apple response during retry
-- **THEN** its prior result is replaced by the new `matched`, `ambiguous`, or `not_found` result
+- **THEN** its prior result is replaced by the new `matched` or `not_found` result
 
 #### Scenario: Retry fails again
 - **WHEN** the required Apple request fails again after all configured attempts

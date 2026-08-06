@@ -54,9 +54,11 @@ function validate(input: unknown): MatchPreferences {
     throw new PreferencesValidationError("Preferences must be an object");
   }
 
-  const p = input as Partial<MatchPreferences>;
+  const p = input as Partial<MatchPreferences> & { ambiguousGap?: unknown };
   const d = DEFAULT_MATCH_PREFERENCES;
-  const knownKeys = new Set(Object.keys(d));
+  // Accept and discard the removed ambiguity-gap preference so existing
+  // preferences.json files migrate without resetting unrelated settings.
+  const knownKeys = new Set([...Object.keys(d), "ambiguousGap"]);
   for (const key of Object.keys(p)) {
     if (!knownKeys.has(key)) {
       throw new PreferencesValidationError(`Unknown preference: ${key}`);
@@ -69,6 +71,12 @@ function validate(input: unknown): MatchPreferences {
   if (p.storefront !== undefined && typeof p.storefront !== "string") {
     throw new PreferencesValidationError("storefront must be a string");
   }
+  if (
+    p.ambiguousGap !== undefined &&
+    (typeof p.ambiguousGap !== "number" || !Number.isFinite(p.ambiguousGap) || p.ambiguousGap < 0 || p.ambiguousGap > 1)
+  ) {
+    throw new PreferencesValidationError("ambiguousGap must be between 0 and 1");
+  }
 
   const randomPauseMinMs = readNumber(p, "appleRandomPauseMinMs", d.appleRandomPauseMinMs, 0, 60_000, true);
   const randomPauseMaxMs = readNumber(p, "appleRandomPauseMaxMs", d.appleRandomPauseMaxMs, 0, 60_000, true);
@@ -78,7 +86,6 @@ function validate(input: unknown): MatchPreferences {
 
   return {
     threshold: readNumber(p, "threshold", d.threshold, 0, 1),
-    ambiguousGap: readNumber(p, "ambiguousGap", d.ambiguousGap, 0, 1),
     preferDurationMatch: readBoolean(p, "preferDurationMatch", d.preferDurationMatch),
     explicitPreference: explicit,
     preferOriginalVersion: readBoolean(p, "preferOriginalVersion", d.preferOriginalVersion),

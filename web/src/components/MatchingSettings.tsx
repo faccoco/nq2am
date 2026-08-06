@@ -5,7 +5,6 @@ import type { MatchPreferences } from "../types";
 
 const DEFAULTS: MatchPreferences = {
   threshold: 0.7,
-  ambiguousGap: 0.1,
   preferDurationMatch: true,
   explicitPreference: "none",
   preferOriginalVersion: true,
@@ -110,27 +109,6 @@ export default function MatchingSettings() {
           />
           <span className="text-xs text-slate-500">
             {t("matching.threshold.help")}
-          </span>
-        </label>
-
-        <label className="flex flex-col gap-1 text-sm text-slate-300">
-          <FieldTitle tooltip={t("matching.ambiguityGap.tooltip")}>
-            {t("matching.ambiguityGap.label")}{" "}
-            <span className="font-mono text-slate-100">
-              {prefs.ambiguousGap.toFixed(2)}
-            </span>
-          </FieldTitle>
-          <input
-            type="range"
-            min={0}
-            max={0.5}
-            step={0.05}
-            value={prefs.ambiguousGap}
-            onChange={(e) => patch({ ambiguousGap: Number(e.target.value) })}
-            className="accent-indigo-500"
-          />
-          <span className="text-xs text-slate-500">
-            {t("matching.ambiguityGap.help")}
           </span>
         </label>
 

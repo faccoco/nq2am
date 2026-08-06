@@ -4,6 +4,8 @@ Normalize playlists from QQ Music and NetEase Cloud Music into a shared metadata
 
 Apple Music matching is intentionally a typed stub in this version. The first step is preserving the original provider metadata well enough to make matching possible later, especially where Apple Music romanizes Japanese metadata outside Japan.
 
+See [Known Issues](docs/known-issues.md) for documented matching limitations.
+
 ## Install
 
 ```bash
