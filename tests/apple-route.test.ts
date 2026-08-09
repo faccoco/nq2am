@@ -47,7 +47,7 @@ async function seedMatchedTask(
         status: "matched",
         selectedId: "song-1",
         appleMusicId: "song-1",
-        candidates: [{ id: "song-1", name: "Song", artistName: "Artist", score: 1 }]
+        candidates: [{ id: "song-1", name: "Song", artistName: "Artist", titleDistance: 0 }]
       }
     ]
   };

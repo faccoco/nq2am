@@ -1,20 +1,20 @@
 # Known Issues
 
-## Localized Apple Music artist names can lower match scores
+## Exact titles and similar albums can still refer to different recordings
 
-Apple Music may return localized artist names that the current string-based
-scorer does not recognize as the same artist. For example:
+Apple Music candidates are sorted first by the normalized title string's
+Levenshtein distance from the source title. Candidates with the same title
+distance are then sorted by normalized album-name distance when both album names
+are available. A title distance other than `0` is rejected as not found.
 
-- NetEase source artist: `David Garrett`
-- Apple Music China artist: `大卫・葛瑞特`
-- Track: `Carnival of Venice`
-- ISRC in both Apple Music China and US catalogs: `GBUM71305794`
+When the selected title distance is `0` but the album distance is not `0`, the
+result remains matched and is marked as **Same track** (`相同曲目`). Artist,
+duration, explicit rating, and version metadata do not affect automatic
+selection.
 
-The current scorer gives the artist field `0`, resulting in a total score of
-`0.60`, below the default `0.70` threshold. An ISRC lookup in the US storefront
-returns the artist as `David Garrett`, confirming that the localized Chinese
-entry represents the same recording.
-
-A future fix could use cross-storefront ISRC metadata or multilingual artist
-aliases instead of treating unresolved cross-script names as definite
-mismatches.
+This intentionally simple rule can still choose the wrong recording when
+multiple songs share both a title and a similar album name. Candidates with the
+same distances retain Apple Music's original search order. If album distance
+cannot be calculated, comparable candidates with album metadata are preferred;
+otherwise the original search order is retained. Matches can be changed manually
+in the match report.

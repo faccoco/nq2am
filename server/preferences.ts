@@ -54,28 +54,25 @@ function validate(input: unknown): MatchPreferences {
     throw new PreferencesValidationError("Preferences must be an object");
   }
 
-  const p = input as Partial<MatchPreferences> & { ambiguousGap?: unknown };
+  const p = input as Partial<MatchPreferences>;
   const d = DEFAULT_MATCH_PREFERENCES;
-  // Accept and discard the removed ambiguity-gap preference so existing
-  // preferences.json files migrate without resetting unrelated settings.
-  const knownKeys = new Set([...Object.keys(d), "ambiguousGap"]);
+  // Discard removed matching/scoring preferences so existing files migrate
+  // without resetting unrelated request settings.
+  const legacyKeys = [
+    "threshold",
+    "ambiguousGap",
+    "preferDurationMatch",
+    "explicitPreference",
+    "preferOriginalVersion"
+  ];
+  const knownKeys = new Set([...Object.keys(d), ...legacyKeys]);
   for (const key of Object.keys(p)) {
     if (!knownKeys.has(key)) {
       throw new PreferencesValidationError(`Unknown preference: ${key}`);
     }
   }
-  const explicit = p.explicitPreference ?? d.explicitPreference;
-  if (explicit !== "explicit" && explicit !== "clean" && explicit !== "none") {
-    throw new PreferencesValidationError("explicitPreference must be explicit, clean, or none");
-  }
   if (p.storefront !== undefined && typeof p.storefront !== "string") {
     throw new PreferencesValidationError("storefront must be a string");
-  }
-  if (
-    p.ambiguousGap !== undefined &&
-    (typeof p.ambiguousGap !== "number" || !Number.isFinite(p.ambiguousGap) || p.ambiguousGap < 0 || p.ambiguousGap > 1)
-  ) {
-    throw new PreferencesValidationError("ambiguousGap must be between 0 and 1");
   }
 
   // Keep accepting the legacy setting, but matching now always uses one
@@ -88,10 +85,6 @@ function validate(input: unknown): MatchPreferences {
   }
 
   return {
-    threshold: readNumber(p, "threshold", d.threshold, 0, 1),
-    preferDurationMatch: readBoolean(p, "preferDurationMatch", d.preferDurationMatch),
-    explicitPreference: explicit,
-    preferOriginalVersion: readBoolean(p, "preferOriginalVersion", d.preferOriginalVersion),
     storefront: (p.storefront ?? d.storefront).trim().toLowerCase(),
     matchConcurrency: readNumber(p, "matchConcurrency", d.matchConcurrency, 1, 10, true),
     appleRequestIntervalMs: readNumber(p, "appleRequestIntervalMs", d.appleRequestIntervalMs, 0, 10_000, true),

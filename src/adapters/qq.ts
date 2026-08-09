@@ -1,3 +1,4 @@
+import { normalizeAlbumMetadata, normalizeTitleMetadata } from "../apple/titleDistance.js";
 import type { NormalizedPlaylist, NormalizedTrack } from "../types.js";
 import { firstNumber, firstObjectArray, firstString, isObject, joinNames, namesFromArray, readPath } from "./common.js";
 
@@ -73,6 +74,10 @@ function normalizeQqTrack(input: unknown, playlistId?: string): NormalizedTrack 
   const artists = namesFromArray(readPath(input, ["singer"]));
   const fallbackArtists = namesFromArray(readPath(input, ["artists"]));
   const allArtists = artists.length > 0 ? artists : fallbackArtists;
+  const titleMetadata = normalizeTitleMetadata(
+    firstString(readPath(input, ["songname"]), readPath(input, ["name"]), readPath(input, ["title"])) ?? "",
+    allArtists
+  );
   const albumMid = firstString(readPath(input, ["albummid"]), readPath(album, ["mid"]), readPath(album, ["pmid"]));
   const albumArtists = [
     ...namesFromArray(readPath(album, ["singers"])),
@@ -84,10 +89,11 @@ function normalizeQqTrack(input: unknown, playlistId?: string): NormalizedTrack 
     intervalSec !== undefined ? Math.round(intervalSec * 1000) : firstNumber(readPath(input, ["duration"]));
 
   return {
-    originalName:
-      firstString(readPath(input, ["songname"]), readPath(input, ["name"]), readPath(input, ["title"])) ?? "",
-    artists: allArtists,
-    albumName: firstString(readPath(input, ["albumname"]), readPath(album, ["name"]), readPath(album, ["title"])),
+    originalName: titleMetadata.title,
+    artists: titleMetadata.artists,
+    albumName: normalizeAlbumMetadata(
+      firstString(readPath(input, ["albumname"]), readPath(album, ["name"]), readPath(album, ["title"]))
+    ),
     albumArtist: firstString(
       readPath(input, ["albumSinger"]),
       readPath(input, ["album_singer"]),

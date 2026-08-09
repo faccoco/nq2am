@@ -50,6 +50,7 @@
     "appleIdReason": "Apple ID / 原因"
   },
   "manual": "(手动)",
+  "sameTrack": "相同曲目",
   "notFoundNoReason": "未找到 Apple Music 候选项。",
   "requestFailedNoReason": "Apple Music 请求在匹配完成前失败。",
   "retry": {
@@ -102,8 +103,8 @@
     "choose": "选择",
     "exact": "完全一致",
     "open": "打开 ↗",
-    "score": "评分 {{score}}",
-    "appleRank": "Apple #{{rank}}",
+    "titleDistance": "标题距离 {{distance}}",
+    "rank": "#{{rank}}",
     "explicit": "E"
   }
 }

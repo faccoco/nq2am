@@ -21,7 +21,12 @@ import {
 import { mapWithConcurrency } from "./concurrency.js";
 import { describeAppleRequestFailure } from "./requestFailure.js";
 import { runWithRetry } from "./requestScheduler.js";
-import { scoreAppleSong } from "./scoring.js";
+import {
+  albumLevenshteinDistance,
+  normalizeAlbumMetadata,
+  normalizeTitleMetadata,
+  titleLevenshteinDistance
+} from "./titleDistance.js";
 
 export type AppleMatchLogEvent = {
   event: "request" | "stage" | "job_complete";
@@ -78,11 +83,28 @@ function durationSince(startedAt: number): number {
   return Math.round((performance.now() - startedAt) * 100) / 100;
 }
 
+const JAPANESE_CHARACTER_RE = /[\u3005\u3006\u303b\u3040-\u30ff\u31f0-\u31ff\uff66-\uff9d]/u;
+
+function containsOnlyAscii(value: string): boolean {
+  for (let index = 0; index < value.length; index += 1) {
+    if (value.charCodeAt(index) > 0x7f) return false;
+  }
+  return true;
+}
+
+export function containsJapaneseCharacters(value: string): boolean {
+  return !containsOnlyAscii(value) && JAPANESE_CHARACTER_RE.test(value);
+}
+
 function buildSearchTerm(track: NormalizedTrack): string {
   return [track.originalName, ...track.artists]
     .map((part) => part.trim())
     .filter(Boolean)
     .join(" ");
+}
+
+function storefrontForSearchTerm(searchTerm: string, accountStore: string): string {
+  return containsJapaneseCharacters(searchTerm) ? "jp" : accountStore;
 }
 
 function apiSessionOptions(
@@ -108,26 +130,46 @@ function buildArtworkUrl(song: AppleSong): string | undefined {
   return art.url.replace("{w}", "200").replace("{h}", "200");
 }
 
-function toCandidate(
-  song: AppleSong,
-  scoreBreakdown: ReturnType<typeof scoreAppleSong>,
-  storefront: string
-): AppleCandidate {
+function normalizeTrackTitleMetadata(track: NormalizedTrack): NormalizedTrack {
+  const metadata = normalizeTitleMetadata(track.originalName, track.artists);
+  return {
+    ...track,
+    originalName: metadata.title,
+    artists: metadata.artists,
+    albumName: normalizeAlbumMetadata(track.albumName)
+  };
+}
+
+function toCandidate(song: AppleSong, track: NormalizedTrack, storefront: string): AppleCandidate {
+  const metadata = normalizeTitleMetadata(song.attributes.name, [song.attributes.artistName]);
+  const albumName = normalizeAlbumMetadata(song.attributes.albumName);
+  const albumDistance = track.albumName && albumName ? albumLevenshteinDistance(track.albumName, albumName) : undefined;
   return {
     id: song.id,
-    name: song.attributes.name,
-    artistName: song.attributes.artistName,
-    albumName: song.attributes.albumName,
+    name: metadata.title,
+    artistName: metadata.artists.join(", "),
+    albumName,
     url: song.attributes.url,
     artworkUrl: buildArtworkUrl(song),
     durationMs: song.attributes.durationInMillis,
     releaseDate: song.attributes.releaseDate,
     contentRating: song.attributes.contentRating,
-    score: scoreBreakdown.total,
-    scoreBreakdown,
+    titleDistance: titleLevenshteinDistance(track.originalName, metadata.title),
+    albumDistance,
     isrc: song.attributes.isrc,
     storefront
   };
+}
+
+function compareCandidates(left: AppleCandidate, right: AppleCandidate): number {
+  const titleDifference = left.titleDistance - right.titleDistance;
+  if (titleDifference !== 0) return titleDifference;
+
+  if (left.albumDistance === undefined) {
+    return right.albumDistance === undefined ? 0 : 1;
+  }
+  if (right.albumDistance === undefined) return -1;
+  return left.albumDistance - right.albumDistance;
 }
 
 function candidateToSong(candidate: AppleCandidate): AppleSong {
@@ -153,6 +195,7 @@ function resultChanged(previous: AppleMatchResult, next: AppleMatchResult): bool
   if (previous.selectedId !== next.selectedId) return true;
   if (previous.appleMusicId !== next.appleMusicId) return true;
   if (previous.reason !== next.reason) return true;
+  if (previous.sameTrack !== next.sameTrack) return true;
 
   const previousCandidates = previous.candidates ?? [];
   const nextCandidates = next.candidates ?? [];
@@ -162,8 +205,8 @@ function resultChanged(previous: AppleMatchResult, next: AppleMatchResult): bool
     const previousCandidate = previousCandidates[index];
     return (
       previousCandidate.id !== candidate.id ||
-      previousCandidate.score !== candidate.score ||
-      previousCandidate.scoreBreakdown?.total !== candidate.scoreBreakdown?.total
+      previousCandidate.titleDistance !== candidate.titleDistance ||
+      previousCandidate.albumDistance !== candidate.albumDistance
     );
   });
 }
@@ -180,6 +223,7 @@ function matchedResult(
   track: NormalizedTrack,
   candidates: AppleCandidate[],
   winner: AppleCandidate,
+  sameTrack: boolean,
   reason?: string
 ): AppleMatchResult {
   return {
@@ -190,60 +234,72 @@ function matchedResult(
     selectionSource: "auto",
     appleMusicId: winner.id,
     appleMusicUrl: winner.url,
+    ...(sameTrack ? { sameTrack: true } : {}),
     reason
   };
 }
 
 /**
- * Keep Apple Music search results in their original order. The first result is
- * the automatic selection when its confidence score reaches the threshold;
- * later results remain available for manual review without local re-ranking.
+ * Sort Apple Music search results by title distance, then by album distance.
+ * Only an exact normalized title match is automatic; a different album is
+ * marked as the same track.
  */
 export async function matchSingleTrack(
   track: NormalizedTrack,
   results: AppleSong[],
-  storefront: string,
-  prefs: MatchPreferences
+  storefront: string
 ): Promise<AppleMatchResult> {
+  const normalizedTrack = normalizeTrackTitleMetadata(track);
   if (results.length === 0) {
-    return { track, status: "not_found", candidates: [], reason: "No results from Apple Music search" };
-  }
-
-  const candidates = results.map((song) => toCandidate(song, scoreAppleSong(track, song, prefs), storefront));
-  const topResult = candidates[0];
-
-  if (topResult.score < prefs.threshold) {
     return {
-      track,
+      track: normalizedTrack,
       status: "not_found",
-      candidates,
-      reason: `Top Apple Music result score ${topResult.score.toFixed(2)} below threshold ${prefs.threshold.toFixed(2)}`
+      candidates: [],
+      reason: "No results from Apple Music search"
     };
   }
 
+  const candidates = results.map((song) => toCandidate(song, normalizedTrack, storefront)).sort(compareCandidates);
+  const winner = candidates[0];
+
+  if (winner.titleDistance !== 0) {
+    return {
+      track: normalizedTrack,
+      status: "not_found",
+      candidates,
+      reason: `Closest candidate title distance ${winner.titleDistance}; exact title match required`
+    };
+  }
+
+  const sameTrack = winner.albumDistance !== undefined && winner.albumDistance !== 0;
   return matchedResult(
-    track,
+    normalizedTrack,
     candidates,
-    topResult,
-    `Selected Apple Music top result (score ${topResult.score.toFixed(2)})`
+    winner,
+    sameTrack,
+    sameTrack
+      ? `Selected exact-title candidate with different album (distance ${winner.albumDistance})`
+      : "Selected exact-title candidate"
   );
 }
 
 /**
- * Match one track: search the account storefront by song title and artists,
- * preserve the returned ranking, and evaluate Apple's top result.
+ * Match one track: search by song title and artists, then rank the returned
+ * candidates by title Levenshtein distance and album-distance tie-breaker.
  */
 async function processTrack(
   track: NormalizedTrack,
   trackIndex: number,
   accountStore: string,
-  prefs: MatchPreferences,
   session: AppleApiSession,
   logger: (event: AppleMatchLogEvent) => void,
   jobId: string | undefined
 ): Promise<AppleMatchResult> {
+  const normalizedTrack = normalizeTrackTitleMetadata(track);
   const searchStartedAt = performance.now();
-  const songs = await session.search(buildSearchTerm(track), accountStore);
+  const searchTerm = buildSearchTerm(normalizedTrack);
+  const searchStorefront = storefrontForSearchTerm(searchTerm, accountStore);
+  const songs = await session.search(searchTerm, searchStorefront);
   logger({
     event: "stage",
     jobId,
@@ -254,7 +310,7 @@ async function processTrack(
   });
 
   const evaluationStartedAt = performance.now();
-  const result = await matchSingleTrack(track, songs, accountStore, prefs);
+  const result = await matchSingleTrack(normalizedTrack, songs, searchStorefront);
   logger({
     event: "stage",
     jobId,
@@ -271,8 +327,8 @@ async function processTrack(
  * Match all tracks in a playlist against the Apple Music catalog.
  * Requires Apple Music login (cookies).
  *
- * `prefs` tunes thresholds and request pacing. `onProgress` (optional) is
- * invoked after each track so a caller can surface live progress.
+ * `prefs` tunes request pacing and storefront selection. `onProgress`
+ * (optional) is invoked after each track so a caller can surface live progress.
  */
 export async function matchAppleMusic(
   playlist: NormalizedPlaylist,
@@ -368,7 +424,7 @@ export async function matchAppleMusic(
         const trackStartedAt = performance.now();
         let outcome: "success" | "error" = "success";
         try {
-          return await processTrack(track, trackIndex, accountStore, prefs, session, logger, jobId);
+          return await processTrack(track, trackIndex, accountStore, session, logger, jobId);
         } catch (error) {
           outcome = "error";
           return requestFailedResult(track, error, "search");
@@ -460,8 +516,8 @@ export async function retryAppleMusicResults(
 }
 
 /**
- * Re-score the candidates of legacy ambiguous / not-found results (e.g. after
- * a preference change) and merge any changed results back into the report.
+ * Re-sort candidates in legacy ambiguous / not-found results by title and album
+ * distance, then merge any changed results back into the report.
  */
 export async function refreshAppleMatchReportCandidates(
   report: AppleMatchReport,
@@ -479,7 +535,7 @@ export async function refreshAppleMatchReportCandidates(
     try {
       const storefront = result.candidates.find((candidate) => candidate.storefront)?.storefront ?? prefs.storefront;
       const songs = result.candidates.map(candidateToSong);
-      const refreshed = await matchSingleTrack(result.track, songs, storefront || "us", prefs);
+      const refreshed = await matchSingleTrack(result.track, songs, storefront || "us");
       results.push(refreshed);
       changed ||= resultChanged(result, refreshed);
     } catch {

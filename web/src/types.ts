@@ -54,24 +54,6 @@ export type AppleRequestFailure = {
 
 export type AppleContentRating = "explicit" | "clean";
 
-export type AppleScoreBreakdown = {
-  total: number;
-  fields: {
-    title: number;
-    artist: number;
-    album: number;
-    duration: number;
-    version: number;
-  };
-  weights: {
-    title: number;
-    artist: number;
-    album: number;
-    duration: number;
-    version: number;
-  };
-};
-
 export type AppleCandidate = {
   id: string;
   name: string;
@@ -82,8 +64,8 @@ export type AppleCandidate = {
   durationMs?: number;
   releaseDate?: string;
   contentRating?: AppleContentRating;
-  score: number;
-  scoreBreakdown?: AppleScoreBreakdown;
+  titleDistance: number;
+  albumDistance?: number;
   isrc?: string;
   storefront?: string;
 };
@@ -96,6 +78,7 @@ export type AppleMatchResult = {
   selectionSource?: "auto" | "manual";
   appleMusicId?: string;
   appleMusicUrl?: string;
+  sameTrack?: boolean;
   reason?: string;
   requestFailure?: AppleRequestFailure;
 };
@@ -111,10 +94,6 @@ export type MatchRetryScope = "not_found" | "ambiguous" | "request_failed" | "se
 export type MatchReviewTab = "all" | "ambiguous" | "not_found" | "request_failed" | "matched";
 
 export type MatchPreferences = {
-  threshold: number;
-  preferDurationMatch: boolean;
-  explicitPreference: "explicit" | "clean" | "none";
-  preferOriginalVersion: boolean;
   storefront: string;
   matchConcurrency: number;
   appleRequestIntervalMs: number;

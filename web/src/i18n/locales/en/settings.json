@@ -27,33 +27,14 @@
   },
   "matching": {
     "title": "Matching",
-    "description": "When you run a match, nq2am preserves Apple Music's original result ranking and auto-selects only the top-ranked result when it reaches the match threshold. Changes apply the next time you run or retry a match.",
+    "description": "Candidates are sorted by normalized title distance, then by album edit distance when titles tie. Only an exact title match is selected automatically; a different album is marked as the same track.",
     "loading": "Loading matching preferences…",
-    "threshold": {
-      "label": "Match threshold:",
-      "help": "Higher is safer but sends more tracks to Not found.",
-      "tooltip": "Each candidate receives a confidence score from title, artist, duration, and version hints. If Apple Music's top-ranked result is below this value, it is not auto-selected; the track becomes not found with candidates kept in Apple's original order for review."
-    },
-    "explicit": {
-      "label": "Explicit / clean preference",
-      "options": {
-        "none": "No preference",
-        "explicit": "Prefer explicit",
-        "clean": "Prefer clean"
-      },
-      "help": "Only used to order candidates with equal scores.",
-      "tooltip": "This does not filter search results. It only orders otherwise equally scored explicit and clean versions."
-    },
     "storefront": {
       "label": "Storefront",
       "placeholder": "auto (from your account)",
-      "help": "Leave blank unless your Apple Music account region is detected wrong.",
-      "tooltip": "This is the Apple Music account region used when creating the final playlist, such as us, jp, or cn."
+      "help": "Tracks containing Japanese kana automatically use Japan; other tracks use this value or the detected account region.",
+      "tooltip": "This is the Apple Music storefront used for ordinary searches, such as us, jp, or cn. A title or artist containing Hiragana, Katakana, or related Japanese characters automatically switches the search storefront to jp."
     },
-    "preferDuration": "Use track duration in the confidence score",
-    "preferDurationTooltip": "Raises confidence when the Apple Music duration is close to the source track. This score only determines whether the top-ranked result reaches the threshold; it never changes Apple's ranking.",
-    "preferOriginal": "Check remaster / live / karaoke version hints in the confidence score",
-    "preferOriginalTooltip": "Lowers confidence when a candidate title looks like a remaster, live, karaoke, instrumental, cover, version, or remix. This never changes Apple's ranking.",
     "performance": {
       "title": "Performance and request pacing",
       "description": "These values apply to new matches, retries, cross-region song resolution, and playlist creation. The first 429 in a consecutive streak triggers a global five-second pause; failed catalog requests are retried three times before a request failure is reported.",

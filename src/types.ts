@@ -42,24 +42,6 @@ export type AppleRequestFailure = {
   attempts?: number;
 };
 
-export type AppleScoreBreakdown = {
-  total: number;
-  fields: {
-    title: number;
-    artist: number;
-    album: number;
-    duration: number;
-    version: number;
-  };
-  weights: {
-    title: number;
-    artist: number;
-    album: number;
-    duration: number;
-    version: number;
-  };
-};
-
 /** A single Apple Music catalog candidate for a normalized track. */
 export type AppleCandidate = {
   id: string;
@@ -71,8 +53,10 @@ export type AppleCandidate = {
   durationMs?: number;
   releaseDate?: string;
   contentRating?: AppleContentRating;
-  score: number;
-  scoreBreakdown?: AppleScoreBreakdown;
+  /** Levenshtein distance from the source track title; lower is closer. */
+  titleDistance: number;
+  /** Album distance used as a title-distance tie-breaker when available. */
+  albumDistance?: number;
   /** ISRC recording id, when available. */
   isrc?: string;
   /** Storefront this candidate's metadata was fetched from (e.g. "jp"). */
@@ -82,13 +66,15 @@ export type AppleCandidate = {
 export type AppleMatchResult = {
   track: NormalizedTrack;
   status: AppleMatchStatus;
-  /** Apple Music search candidates in the exact order returned by the catalog. */
+  /** Candidates sorted by title distance, then by available album distance. */
   candidates?: AppleCandidate[];
   /** The chosen candidate id (mirrors appleMusicId for the selected one). */
   selectedId?: string;
   selectionSource?: "auto" | "manual";
   appleMusicId?: string;
   appleMusicUrl?: string;
+  /** Exact title match whose album name differs from the source. */
+  sameTrack?: boolean;
   reason?: string;
   requestFailure?: AppleRequestFailure;
 };
@@ -105,14 +91,6 @@ export type AppleMatchReport = {
  * through the Settings UI — never hand-written.
  */
 export type MatchPreferences = {
-  /** Minimum score for an automatic match (0–1). */
-  threshold: number;
-  /** Favor candidates whose duration is closest to the source track. */
-  preferDurationMatch: boolean;
-  /** Legacy preference retained for stored-settings compatibility; candidate order always follows Apple Music. */
-  explicitPreference: "explicit" | "clean" | "none";
-  /** Prefer original/studio versions over remaster/live/karaoke/instrumental. */
-  preferOriginalVersion: boolean;
   /** Apple storefront override; empty string means auto-detect. */
   storefront: string;
   /** Maximum number of source tracks evaluated concurrently. */
@@ -134,10 +112,6 @@ export type MatchPreferences = {
 };
 
 export const DEFAULT_MATCH_PREFERENCES: MatchPreferences = {
-  threshold: 0.7,
-  preferDurationMatch: true,
-  explicitPreference: "none",
-  preferOriginalVersion: true,
   storefront: "",
   matchConcurrency: 3,
   appleRequestIntervalMs: 150,

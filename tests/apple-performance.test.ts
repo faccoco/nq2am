@@ -804,7 +804,7 @@ test("playlist creation collects matched ids and creates through one session", a
             id: "song-id",
             name: "Song",
             artistName: "Artist",
-            score: 1
+            titleDistance: 0
           }
         ]
       }

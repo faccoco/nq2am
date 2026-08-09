@@ -27,33 +27,14 @@
   },
   "matching": {
     "title": "匹配",
-    "description": "运行匹配时，nq2am 会保留 Apple Music 返回的原始排名，并仅在排名第一的结果达到匹配阈值时自动选择。更改会在下次运行或重试匹配时生效。",
+    "description": "候选项先按规范化标题距离排序，标题距离相同时优先专辑编辑距离较小的结果。只有标题距离为 0 时才自动匹配；专辑不同的结果会标记为“相同曲目”。",
     "loading": "正在加载匹配偏好…",
-    "threshold": {
-      "label": "匹配阈值：",
-      "help": "调高更安全，但会有更多歌曲进入未找到。",
-      "tooltip": "每个候选项会根据标题、艺术家、时长和版本线索得到一个置信分数。如果 Apple Music 排名第一的结果低于这个值，就不会自动选择；这首歌会变成未找到，并按 Apple 原始排名保留候选项供之后复核。"
-    },
-    "explicit": {
-      "label": "显式 / 干净版本偏好",
-      "options": {
-        "none": "无偏好",
-        "explicit": "优先显式版本",
-        "clean": "优先干净版本"
-      },
-      "help": "只用于排列分数完全相同的候选项。",
-      "tooltip": "这个设置不会过滤搜索结果，只会调整分数完全相同的显式版和干净版候选项顺序。"
-    },
     "storefront": {
       "label": "店面区域",
       "placeholder": "自动（来自你的账号）",
-      "help": "除非 Apple Music 账号区域检测错了，否则建议留空。",
-      "tooltip": "这是创建最终 Apple Music 歌单时使用的账号区域，例如 us、jp、cn。"
+      "help": "包含日文假名的歌曲会自动改用日本区；其他歌曲使用这里设置或账号检测到的区域。",
+      "tooltip": "这是普通歌曲搜索使用的 Apple Music 区域，例如 us、jp、cn。标题或艺术家中出现平假名、片假名等日文字符时，搜索区域会自动切换为 jp。"
     },
-    "preferDuration": "在置信评分中使用歌曲时长",
-    "preferDurationTooltip": "当 Apple Music 候选项的时长接近源歌曲时，会提高置信分数。此分数只用于判断排名第一的结果是否达到阈值，不会改变 Apple 原始排名。",
-    "preferOriginal": "在置信评分中检查重制 / 现场 / 卡拉OK 等版本线索",
-    "preferOriginalTooltip": "如果候选标题看起来是 remaster、live、karaoke、instrumental、cover、version 或 remix，会降低置信分数；这不会改变 Apple 原始排名。",
     "performance": {
       "title": "性能与请求节奏",
       "description": "这些参数会用于新的匹配、重试、跨区歌曲解析和创建歌单。首次出现连续 429 时会全局暂停 5 秒；请求失败会自动重试 3 次，全部失败后才报告请求失败。",

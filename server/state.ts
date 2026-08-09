@@ -281,6 +281,7 @@ export function setTrackSelection(key: string, idx: number, appleMusicId: string
     result.status = "not_found";
     result.appleMusicId = undefined;
     result.appleMusicUrl = undefined;
+    delete result.sameTrack;
     result.reason = "Marked as no match";
     delete result.requestFailure;
     task.updatedAt = Date.now();
@@ -296,6 +297,11 @@ export function setTrackSelection(key: string, idx: number, appleMusicId: string
   result.status = "matched";
   result.appleMusicId = candidate.id;
   result.appleMusicUrl = candidate.url;
+  if (candidate.titleDistance === 0 && candidate.albumDistance !== undefined && candidate.albumDistance !== 0) {
+    result.sameTrack = true;
+  } else {
+    delete result.sameTrack;
+  }
   result.reason = undefined;
   delete result.requestFailure;
   task.updatedAt = Date.now();

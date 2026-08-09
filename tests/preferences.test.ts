@@ -40,12 +40,21 @@ async function invokePutPreferences(body: unknown) {
   return { statusCode, jsonBody };
 }
 
-test("legacy preferences receive configurable Apple request settings", async () => {
+test("legacy scoring preferences are discarded while request settings receive defaults", async () => {
   const { setPreferences } = await import("../server/preferences.js");
-  const prefs = await setPreferences({ threshold: 0.8, ambiguousGap: 0.1 });
+  const prefs = await setPreferences({
+    threshold: 0.8,
+    ambiguousGap: 0.1,
+    preferDurationMatch: false,
+    explicitPreference: "clean",
+    preferOriginalVersion: false
+  });
 
-  assert.equal(prefs.threshold, 0.8);
+  assert.equal("threshold" in prefs, false);
   assert.equal("ambiguousGap" in prefs, false);
+  assert.equal("preferDurationMatch" in prefs, false);
+  assert.equal("explicitPreference" in prefs, false);
+  assert.equal("preferOriginalVersion" in prefs, false);
   assert.equal(prefs.matchConcurrency, DEFAULT_MATCH_PREFERENCES.matchConcurrency);
   assert.equal(prefs.appleRequestIntervalMs, DEFAULT_MATCH_PREFERENCES.appleRequestIntervalMs);
   assert.equal(prefs.appleRequestTimeoutMs, DEFAULT_MATCH_PREFERENCES.appleRequestTimeoutMs);

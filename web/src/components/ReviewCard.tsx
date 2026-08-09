@@ -80,6 +80,11 @@ export default function ReviewCard({
             >
               {t(`status.${r.status}`)}
             </span>
+            {r.sameTrack && (
+              <span className="inline-flex items-center whitespace-nowrap rounded-full bg-cyan-600/20 px-2 py-0.5 text-xs font-medium text-cyan-200 ring-1 ring-inset ring-cyan-500/40">
+                {t("sameTrack")}
+              </span>
+            )}
             {r.selectionSource === "manual" && (
               <span className="text-[10px] text-slate-500">{t("manual")}</span>
             )}
@@ -168,7 +173,7 @@ export default function ReviewCard({
             <CandidateCard
               key={c.id}
               candidate={c}
-              appleRank={index + 1}
+              rank={index + 1}
               sourceDurationMs={r.track.durationMs}
               selected={r.selectedId === c.id}
               busy={busy}

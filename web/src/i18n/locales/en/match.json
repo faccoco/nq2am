@@ -50,6 +50,7 @@
     "appleIdReason": "Apple ID / Reason"
   },
   "manual": "(manual)",
+  "sameTrack": "Same track",
   "notFoundNoReason": "No Apple Music candidate was found.",
   "requestFailedNoReason": "The Apple Music request failed before matching completed.",
   "retry": {
@@ -102,8 +103,8 @@
     "choose": "Choose",
     "exact": "exact",
     "open": "open ↗",
-    "score": "score {{score}}",
-    "appleRank": "Apple #{{rank}}",
+    "titleDistance": "title distance {{distance}}",
+    "rank": "#{{rank}}",
     "explicit": "E"
   }
 }

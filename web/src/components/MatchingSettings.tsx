@@ -4,10 +4,6 @@ import { api } from "../api";
 import type { MatchPreferences } from "../types";
 
 const DEFAULTS: MatchPreferences = {
-  threshold: 0.7,
-  preferDurationMatch: true,
-  explicitPreference: "none",
-  preferOriginalVersion: true,
   storefront: "",
   matchConcurrency: 3,
   appleRequestIntervalMs: 150,
@@ -90,69 +86,21 @@ export default function MatchingSettings() {
         </div>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <label className="flex flex-col gap-1 text-sm text-slate-300">
-          <FieldTitle tooltip={t("matching.threshold.tooltip")}>
-            {t("matching.threshold.label")}{" "}
-            <span className="font-mono text-slate-100">
-              {prefs.threshold.toFixed(2)}
-            </span>
-          </FieldTitle>
-          <input
-            type="range"
-            min={0}
-            max={1}
-            step={0.05}
-            value={prefs.threshold}
-            onChange={(e) => patch({ threshold: Number(e.target.value) })}
-            className="accent-indigo-500"
-          />
-          <span className="text-xs text-slate-500">
-            {t("matching.threshold.help")}
-          </span>
-        </label>
-
-        <label className="flex flex-col gap-1 text-sm text-slate-300">
-          <FieldTitle tooltip={t("matching.storefront.tooltip")}>
-            {t("matching.storefront.label")}
-          </FieldTitle>
-          <input
-            type="text"
-            value={prefs.storefront}
-            onChange={(e) => patch({ storefront: e.target.value })}
-            placeholder={t("matching.storefront.placeholder")}
-            className="rounded-md border border-slate-600 bg-slate-900 px-3 py-2 text-slate-100 placeholder:text-slate-500 focus:border-indigo-500 focus:outline-none"
-          />
-          <span className="text-xs text-slate-500">
-            {t("matching.storefront.help")}
-          </span>
-        </label>
-      </div>
-
-      <div className="flex flex-col gap-2">
-        <label className="flex items-center gap-2 text-sm text-slate-300">
-          <input
-            type="checkbox"
-            className="h-4 w-4 accent-indigo-500"
-            checked={prefs.preferDurationMatch}
-            onChange={(e) => patch({ preferDurationMatch: e.target.checked })}
-          />
-          <FieldTitle tooltip={t("matching.preferDurationTooltip")}>
-            {t("matching.preferDuration")}
-          </FieldTitle>
-        </label>
-        <label className="flex items-center gap-2 text-sm text-slate-300">
-          <input
-            type="checkbox"
-            className="h-4 w-4 accent-indigo-500"
-            checked={prefs.preferOriginalVersion}
-            onChange={(e) => patch({ preferOriginalVersion: e.target.checked })}
-          />
-          <FieldTitle tooltip={t("matching.preferOriginalTooltip")}>
-            {t("matching.preferOriginal")}
-          </FieldTitle>
-        </label>
-      </div>
+      <label className="flex max-w-xl flex-col gap-1 text-sm text-slate-300">
+        <FieldTitle tooltip={t("matching.storefront.tooltip")}>
+          {t("matching.storefront.label")}
+        </FieldTitle>
+        <input
+          type="text"
+          value={prefs.storefront}
+          onChange={(e) => patch({ storefront: e.target.value })}
+          placeholder={t("matching.storefront.placeholder")}
+          className="rounded-md border border-slate-600 bg-slate-900 px-3 py-2 text-slate-100 placeholder:text-slate-500 focus:border-indigo-500 focus:outline-none"
+        />
+        <span className="text-xs text-slate-500">
+          {t("matching.storefront.help")}
+        </span>
+      </label>
 
       <section className="space-y-4 border-t border-slate-700 pt-4">
         <div>

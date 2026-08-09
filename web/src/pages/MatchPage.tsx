@@ -746,6 +746,11 @@ export default function MatchPage() {
                       >
                         {t(`status.${r.status}`)}
                       </span>
+                      {r.sameTrack && (
+                        <span className="ml-1 inline-flex items-center whitespace-nowrap rounded-full bg-cyan-600/20 px-2 py-0.5 text-xs font-medium text-cyan-200 ring-1 ring-inset ring-cyan-500/40">
+                          {t("sameTrack")}
+                        </span>
+                      )}
                       {r.selectionSource === "manual" && (
                         <span className="ml-1 text-[10px] text-slate-500">
                           {t("manual")}

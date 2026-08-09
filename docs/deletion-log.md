@@ -11,6 +11,67 @@
 
 ---
 
+## ✅ [已添加] 标题中小括号预处理
+
+**时间**：2026-08-09
+
+QQ、网易云和 Apple Music 曲名进入搜索与距离比较前，会删除成对的小括号和中括号及其内部内容，兼容 `()`、`（）`、`[]`、`［］` 并支持嵌套。`feat.` 注记仍会先提取并合并到艺术家字段。比如 `Love it! (New Original Version) [feat. Hatsune Miku]` 会规范化为 `Love it!`。
+
+### 验证
+
+- `pnpm test` ✅（81 tests pass）
+- `pnpm run build:web` ✅
+- `pnpm run lint` ✅（43 files）
+- `pnpm run typecheck` ✅
+
+---
+
+## ✅ [已添加] 专辑 Levenshtein 距离作为标题平局条件
+
+**时间**：2026-08-09
+
+标题距离仍是主排序条件；标题距离相同时，双方都有专辑名的候选按专辑编辑距离从小到大排序。无法计算专辑距离的候选排在可计算的候选之后；标题和专辑距离都相同时保留 Apple Music 原始顺序。只有标题距离为 `0` 才会自动匹配，选中候选的专辑距离不为 `0` 时仍标记为“相同曲目”。
+
+### 验证
+
+- `pnpm test` ✅（81 tests pass）
+- `pnpm run build:web` ✅
+- `pnpm run lint` ✅（43 files）
+
+---
+
+## ✅ [已删除] 加权评分体系，仅保留标题 Levenshtein 主排序
+
+**时间**：2026-08-07
+
+**动机**：彻底移除 title/artist/album/duration/version 加权评分与阈值裁决，让候选排序规则保持单一、透明。
+
+### 该阶段完成时的逻辑（后续已由顶部专辑次级排序补充）
+
+1. Apple Music 搜索结果逐项只比较 `track.originalName` 与候选 `attributes.name`。
+2. QQ、网易云和 Apple Music 标题中的 `(feat. XXX)`（兼容大小写、可选句点和全角括号）会被移除，`XXX` 合并进艺术家字段并去重。
+3. 标题再做 NFKC、转小写、统一全角 `＆`、移除中英文撇号并裁掉首尾空白，最后按 Unicode 字符计算 Levenshtein 距离。
+4. 候选按标题距离从小到大排序；距离相同则保持 Apple Music 原始顺序。
+5. 最小标题距离不为 `0` 时返回 `not_found`；只有规范化标题完全一致时才自动匹配。
+6. 专辑名预处理会删除末尾的 `- Single`（兼容常见连字符、大小写和两侧空白），再计算专辑距离。
+7. 标题距离为 `0` 且双方都有专辑名时计算专辑距离；专辑距离不为 `0` 的匹配结果标记为“相同曲目”。
+8. 艺术家、专辑、时长、显式版本和版本描述不参与候选排序。
+
+### 删除内容
+
+- 删除 `src/apple/scoring.ts` 及 `AppleScoreBreakdown`、`score`/`scoreBreakdown` 候选字段。
+- 删除 `threshold`、`preferDurationMatch`、`explicitPreference`、`preferOriginalVersion` 活跃偏好及设置 UI；服务端仅在迁移旧 `preferences.json` 时接受并丢弃这些键。
+- 候选改为记录整数 `titleDistance`，匹配报告 UI 展示标题距离与距离排序名次。
+- `refreshAppleMatchReportCandidates` 改为重算标题距离并重新排序历史候选。
+
+### 验证
+
+- `pnpm test` ✅（74 tests pass）
+- `pnpm run build:web` ✅
+- `pnpm run lint` ✅（43 files）
+
+---
+
 ## ✅ [已删除] 匹配算法进一步瘦身（查询词、级联裁决、歧义间隔、平局打破、封面相似度、ISRC 跨店桥接）
 
 **时间**：本次会话
@@ -24,9 +85,9 @@
 4. **封面相似度**：整个 `src/apple/artwork.ts` 删除（`ArtworkComparator`/`createArtworkComparator`/`chooseByCoverSimilarity`/`CandidateSimilarity`）；`matchSingleTrack` 不再接收 `chooseCover`；移除 `artworkComparatorFactory`、`artwork` 阶段日志、`artworkTimeoutMs` 偏好（types/server/web/i18n/tests）。
 5. **ISRC 跨店桥接**：删除 `resolveCandidateId`、`AppleApiSession.songsByIsrc` 与 `appleSongsByIsrc` 导出；`resolveAppleMusicTrackIds` 改为同步、直接收集已匹配候选 id（不再需要 session/storefront/concurrency）；`createAppleMusicPlaylistFromReport` 不再探测 accountStore。`AppleCandidate.addableId` 字段移除；`AppleRequestOperation` 去掉 `"isrc"`；`mergePreservedCandidateFields` 删除。
 
-### `matchSingleTrack` 现在的逻辑
+### `matchSingleTrack` 在该阶段完成时的逻辑
 
-分数 → 排序 → 取前 N：无结果或最高分 < `threshold` → `not_found`；否则 → `matched`（最高分）。前两名分差不再参与裁决。
+分数 → 排序 → 取前 N：无结果或最高分 < `threshold` → `not_found`；否则 → `matched`（最高分）。前两名分差不再参与裁决。此逻辑后来又被顶部记录的“仅标题 Levenshtein 距离排序”替代。
 
 ### 受影响的文件
 
@@ -36,9 +97,9 @@
 - spec：`openspec/specs/apple-match-request-failure-handling/spec.md` 删除已不可能触发的「封面比较超时」场景，并把成功重试结果收窄为 `matched | not_found`。
 - 测试：删 `tests/real-songs.test.ts` + `tests/fixtures/real-songs-same-recording.json`（为旧专辑相似度 GT 而设的回归周定）、`package.json` 的 `test:real` 脚本；重写/精简 `tests/apple.test.ts`、`tests/apple-performance.test.ts` 中依赖已删机制的用例，并覆盖零分差候选也直接选中第一名。
 
-### 保留
+### 该阶段当时保留
 
-- `threshold` / `explicitPreference`（仅等分排序定序）/ 评分体系（title/artist/album/duration/version）/ 请求调度与重试 / `refreshAppleMatchReportCandidates`（重算候选）/ `retry*` / `candidate.storefront` 与 `candidate.isrc`（仅作元数据，CandidateCard 仍可展示 storefront 徽标；现在恒为账号区）。
+- `threshold` / `explicitPreference`（仅等分排序定序）/ 评分体系（title/artist/album/duration/version）/ 请求调度与重试 / `refreshAppleMatchReportCandidates`（重算候选）/ `retry*` / `candidate.storefront` 与 `candidate.isrc`（仅作元数据，CandidateCard 仍可展示 storefront 徽标；当时恒为账号区）。
 - `ambiguous` 状态与对应复核 UI 仅为历史报告兼容保留；新的自动匹配不会再产出该状态。
 
 ### 验证
@@ -124,7 +185,7 @@
 
 ### 回退完成时的匹配行为（v1，随后继续简化）
 
-每个 Apple 候选独立按 title/artist/album/duration/version 加权打分；当时仍要求最高分过 `threshold` 且与第二名保持足够分差。后续“匹配算法进一步瘦身”已删除分差裁决，当前只保留单阈值判断。状态集合仍兼容 `not_implemented | matched | not_found | ambiguous | request_failed`（无 `score_rejected`）。
+每个 Apple 候选独立按 title/artist/album/duration/version 加权打分；当时仍要求最高分过 `threshold` 且与第二名保持足够分差。后续“匹配算法进一步瘦身”删除了分差裁决，再后续又由顶部记录的“仅标题 Levenshtein 距离排序”替代。状态集合仍兼容 `not_implemented | matched | not_found | ambiguous | request_failed`（无 `score_rejected`）。
 
 ### 备注
 

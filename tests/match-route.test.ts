@@ -122,7 +122,7 @@ test("match route accepts null appleMusicId to mark a track as no match", async 
             id: "candidate-1",
             name: "Song",
             artistName: "Artist",
-            score: 0.99
+            titleDistance: 0
           }
         ]
       }

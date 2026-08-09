@@ -32,6 +32,76 @@ test("normalizes NetEase Cloud Music playlist fixture", async () => {
   assert.equal(playlist.tracks[1].albumArtist, "LiSA");
 });
 
+test("moves QQ and NetEase feat title annotations into deduplicated artists", () => {
+  const qq = normalizeQqPlaylist({
+    cdlist: [
+      {
+        disstid: "feat-qq",
+        songList: [
+          {
+            songmid: "qq-song",
+            songname: "Song (feat. Guest)",
+            singer: [{ name: "Primary" }, { name: "Guest" }],
+            albumname: "QQ Album - Single"
+          }
+        ]
+      }
+    ]
+  });
+  assert.equal(qq.tracks[0].originalName, "Song");
+  assert.deepEqual(qq.tracks[0].artists, ["Primary", "Guest"]);
+  assert.equal(qq.tracks[0].albumName, "QQ Album");
+
+  const netease = normalizeNeteasePlaylist({
+    playlist: {
+      id: "feat-netease",
+      tracks: [
+        {
+          id: "netease-song",
+          name: "Song ［FeAt. Guest］",
+          ar: [{ name: "Primary" }],
+          al: { name: "NetEase Album – Single" }
+        }
+      ]
+    }
+  });
+  assert.equal(netease.tracks[0].originalName, "Song");
+  assert.deepEqual(netease.tracks[0].artists, ["Primary", "Guest"]);
+  assert.equal(netease.tracks[0].albumName, "NetEase Album");
+});
+
+test("removes round and square bracket annotations from imported track titles", () => {
+  const qq = normalizeQqPlaylist({
+    cdlist: [
+      {
+        disstid: "brackets-qq",
+        songList: [
+          {
+            songmid: "qq-brackets",
+            songname: "Love it! (New Original Version) [Demo]",
+            singer: [{ name: "S.C.X" }]
+          }
+        ]
+      }
+    ]
+  });
+  assert.equal(qq.tracks[0].originalName, "Love it!");
+
+  const netease = normalizeNeteasePlaylist({
+    playlist: {
+      id: "brackets-netease",
+      tracks: [
+        {
+          id: "netease-brackets",
+          name: "Song （Live）［2024 Remaster］",
+          ar: [{ name: "Artist" }]
+        }
+      ]
+    }
+  });
+  assert.equal(netease.tracks[0].originalName, "Song");
+});
+
 test("normalizes track duration to milliseconds (qq seconds, netease ms)", () => {
   const qq = normalizeQqPlaylist({
     cdlist: [
