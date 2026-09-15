@@ -20,6 +20,11 @@ export default function CandidateCard({
   const { t } = useTranslation("match");
   const delta = fmtDelta(candidate.durationMs, sourceDurationMs);
   const exact = delta === "exact";
+  const versionLabel = (candidate.evidence?.parsedCandidate.versionDescriptors ?? [])
+    .filter((descriptor) => descriptor.identityRelevant !== false && descriptor.category !== "recording")
+    .map((descriptor) => descriptor.raw)
+    .filter(Boolean)
+    .join(" · ");
 
   return (
     <div
@@ -67,6 +72,9 @@ export default function CandidateCard({
             </span>
           )}
           <span>· {t("candidate.score", { score: candidate.score.toFixed(2) })}</span>
+          {versionLabel && (
+            <span className="truncate text-slate-400">{t("candidate.version", { version: versionLabel })}</span>
+          )}
           {candidate.url && (
             <a
               href={candidate.url}

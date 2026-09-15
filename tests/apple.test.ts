@@ -745,16 +745,17 @@ test("Apple Music retry replaces request failures with fresh semantic results", 
       logger: () => {},
       sessionFactory: async () => ({
         search: async (term) => {
-          if (term.startsWith("Matched")) {
+          const key = term.toLowerCase();
+          if (key.startsWith("matched")) {
             return [appleSongWith("matched", { name: "Matched", artistName: "Artist", durationMs: 180_000 })];
           }
-          if (term.startsWith("Ambiguous")) {
+          if (key.startsWith("ambiguous")) {
             return [
               appleSongWith("ambiguous-one", { name: "Ambiguous", artistName: "Artist", durationMs: 180_000 }),
               appleSongWith("ambiguous-two", { name: "Ambiguous", artistName: "Artist", durationMs: 180_000 })
             ];
           }
-          if (term.startsWith("Failed")) {
+          if (key.startsWith("failed")) {
             throw new Error("fetch failed");
           }
           return [];

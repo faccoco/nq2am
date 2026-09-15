@@ -49,6 +49,14 @@ export type ParsedRecordingMetadata = {
   recordingFacets: string[];
   structuralFacets: string[];
   releaseFacets: string[];
+  versionDescriptors?: Array<{
+    category: string;
+    kind: string;
+    ordinal?: string;
+    payload: string;
+    raw: string;
+    identityRelevant?: boolean;
+  }>;
 };
 
 export type AppleArtistEvidence = {
@@ -73,6 +81,8 @@ export type AppleCandidateEvidence = {
   artist: AppleArtistEvidence;
   durationSimilarity: number;
   versionCompatibility: number;
+  versionRelation?: "agree" | "structural_omit" | "named_omit" | "conflict";
+  unrequestedStructuralVariant?: boolean;
   albumSimilarity: number;
   albumBonus: number;
   artworkBonus: number;
@@ -115,6 +125,8 @@ export type AppleRecordingGroupEvidence = {
   selectedReleaseId?: string;
   decisiveEvidence: string[];
   conflicts: string[];
+  versionRelation?: "agree" | "structural_omit" | "named_omit" | "conflict";
+  versionConflict?: { source: string; candidate: string };
 };
 
 export type AppleRequestFailure = {
@@ -175,11 +187,11 @@ export type AppleMatchResult = {
   appleMusicUrl?: string;
   reason?: string;
   requestFailure?: AppleRequestFailure;
-  scoringVersion?: 2;
+  scoringVersion?: 2 | 3;
   retrieval?: AppleRetrievalDiagnostics;
   recordingGroups?: AppleRecordingGroupEvidence[];
   decision?: {
-    scoringVersion: 2;
+    scoringVersion: 2 | 3;
     bestGroupConfidence?: number;
     runnerUpGroupConfidence?: number;
     margin?: number;
@@ -195,15 +207,36 @@ export type AppleMatchReport = {
   provider: MusicProvider;
   playlistId?: string;
   playlistName?: string;
-  scoringVersion?: 2;
+  scoringVersion?: 2 | 3;
   results: AppleMatchResult[];
 };
 
 export type MatchRetryScope = "not_found" | "score_rejected" | "ambiguous" | "request_failed" | "selected" | "all";
 export type MatchReviewTab = "all" | "ambiguous" | "score_rejected" | "not_found" | "request_failed" | "matched";
 
+export type ArtistAliasCatalogProgress = {
+  phase: "listing" | "downloading" | "compiling";
+  bytesReceived: number;
+  bytesTotal?: number;
+  percent?: number;
+  currentSource?: string;
+  bytesPerSecond?: number;
+  etaSeconds?: number;
+};
+
+export type ArtistAliasCatalogStatus = {
+  status: "idle" | "downloading" | "failed";
+  refreshedAt?: string;
+  dumpDate?: string;
+  sources: Array<{ id: string; license: string; attribution: string; url: string }>;
+  groupCount: number;
+  sourceCounts?: Partial<Record<string, number>>;
+  error?: string;
+  progress?: ArtistAliasCatalogProgress;
+};
+
 export type MatchPreferences = {
-  scoringVersion: 2;
+  scoringVersion: 3;
   threshold: number;
   reviewThreshold: number;
   ambiguousGap: number;

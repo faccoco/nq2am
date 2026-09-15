@@ -1,5 +1,8 @@
 import type { AppleArtistEvidence, AppleArtistPairEvidence, ParsedRecordingMetadata } from "../types.js";
 import { REVIEWED_ARTIST_ALIASES } from "./artistAliases.js";
+import { catalogNamesAreAliases, currentArtistAliasSnapshot } from "./artistAliasIndex.js";
+import { foldHanToSimplified } from "./hanFold.js";
+import { classifyVersionSegment, descriptorsAreMetadata } from "./versionSemantics.js";
 
 export type RecordingFacetCategory = "recording" | "structural" | "release";
 
@@ -14,19 +17,23 @@ const FACET_RULES: readonly FacetRule[] = [
   {
     category: "recording",
     facet: "instrumental",
-    pattern: /\binstrumental(?:\s+version)?\b|インスト(?:ゥルメンタル)?/iu
+    pattern: /\binstrumental(?:\s+version)?\b|インスト(?:ゥルメンタル)?|伴奏/iu
   },
   { category: "recording", facet: "karaoke", pattern: /\bkaraoke\b|カラオケ/iu },
-  { category: "recording", facet: "live", pattern: /\blive(?:\s+(?:at|from|in)\b)?|ライブ(?:版|ver(?:sion)?\.?)?/iu },
-  { category: "recording", facet: "remix", pattern: /\b(?:re)?mix(?:ed)?\b|リミックス/iu },
-  { category: "recording", facet: "cover", pattern: /\bcover(?:ed)?\b|カバー/iu },
+  {
+    category: "recording",
+    facet: "live",
+    pattern: /\blive(?:\s+(?:at|from|in)\b)?|ライブ(?:版|ver(?:sion)?\.?)?|现场(?:\s*版)?|演唱会/iu
+  },
+  { category: "recording", facet: "remix", pattern: /\bremix(?:ed)?\b|リミックス|dj\s*版/iu },
+  { category: "recording", facet: "cover", pattern: /\bcover(?:ed)?\b|カバー|翻唱/iu },
   { category: "recording", facet: "acoustic", pattern: /\bacoustic\b|アコースティック/iu },
   { category: "recording", facet: "demo", pattern: /\bdemo\b/iu },
   { category: "recording", facet: "edit", pattern: /\b(?:tv\s*size|short\s+(?:edit|version)|edited\s+version)\b/iu },
   { category: "structural", facet: "radio_edit", pattern: /\bradio\s+(?:edit|version)\b/iu },
   { category: "structural", facet: "extended", pattern: /\bextended(?:\s+(?:mix|version|ver\.?))?\b/iu },
   { category: "structural", facet: "long", pattern: /\blong(?:\s+(?:mix|version|ver\.?))?\b/iu },
-  { category: "structural", facet: "full", pattern: /\bfull(?:\s+(?:mix|version|ver\.?))?\b/iu },
+  { category: "structural", facet: "full", pattern: /\bfull(?:\s+(?:mix|version|ver\.?))?\b|完整版/iu },
   { category: "structural", facet: "album_version", pattern: /\balbum\s+(?:mix|version|ver\.?)\b/iu },
   {
     category: "structural",
@@ -37,10 +44,14 @@ const FACET_RULES: readonly FacetRule[] = [
   { category: "release", facet: "anniversary", pattern: /\b(?:\d+(?:st|nd|rd|th)\s+)?anniversary\b/iu },
   { category: "release", facet: "deluxe", pattern: /\bdeluxe\b/iu },
   { category: "release", facet: "single", pattern: /\bsingle\b/iu },
-  { category: "release", facet: "edition", pattern: /\b(?:special|expanded|limited|collector(?:s)?)\s+edition\b/iu }
+  { category: "release", facet: "edition", pattern: /\b(?:special|expanded|limited|collector(?:s)?)\s+edition\b/iu },
+  { category: "release", facet: "theme", pattern: /主题曲|片头曲|片尾曲|插曲/iu },
+  { category: "release", facet: "media_tie", pattern: /(?:电影|电视剧|电视|动画|动漫)\s*[《「『]?/iu }
 ] as const;
 
 const FEATURED_PATTERN = /\b(?:feat(?:uring)?|ft|with)\.?\s+([^()[\]{}]+?)(?=$|\s*[-–—]|\s*[)\]】}])/giu;
+// NFKC normalization has already folded full-width brackets and colons to ASCII by this point.
+const VOICE_ACTOR_PATTERN = /[([{【]\s*(?:cv|c\.v)[.:]?\s*([^)\]}】]+)[)\]}】]/giu;
 const WRAPPED_SEGMENT = /([([{（【])([^()[\]{}（）【】]+)([)\]}）】])/gu;
 
 export function normalizeRecordingText(value: string): string {
@@ -80,7 +91,7 @@ function removeFeaturedCredits(value: string, featuredArtists: string[]): string
 
 function segmentIsMetadata(segment: string): boolean {
   const normalized = normalizeFacetText(segment);
-  if (matchingFacets(normalized).length > 0) return true;
+  if (descriptorsAreMetadata(normalized) || matchingFacets(normalized).length > 0) return true;
   return /^(?:feat(?:uring)?|ft|with)\.?\b/iu.test(normalized);
 }
 
@@ -96,7 +107,7 @@ function stripFacetSegments(value: string): string {
   // omit it. Strip only a recognized trailing descriptor when a base title is
   // present; a title that consists solely of "Live", for example, is kept.
   next = next.replace(
-    /(?<=\S)\s+(?:(?:album\s+)?(?:extended|long|full)\s*(?:mix|version|ver\.?)?|radio\s+(?:edit|version)|off[\s_-]*vocal|instrumental(?:\s+version)?|karaoke|live|remix|cover|(?:\d{4}\s+)?remaster(?:ed)?|(?:special|expanded|limited)\s+edition)\s*$/iu,
+    /(?<=\S)\s+(?:(?:album\s+)?(?:extended|long|full)\s*(?:mix|version|ver\.?)?|radio\s+(?:edit|version)|off[\s_-]*vocal|instrumental(?:\s+version)?|karaoke|live|remix|cover|(?:\d{4}\s+)?remaster(?:ed)?|(?:special|expanded|limited)\s+edition|伴奏|翻唱|现场(?:\s*版)?|演唱会|dj\s*版|完整版|主题曲|片头曲|片尾曲|插曲|[\p{L}\p{N}_+.-]+(?:\s+)?(?:ver(?:sion)?\.?|版|アレンジ)|#\s*\d+\s*ver(?:sion)?\.?)\s*$/iu,
     " "
   );
   return next;
@@ -106,7 +117,9 @@ export function parseRecordingMetadata(title: string): ParsedRecordingMetadata {
   const normalized = normalizeRecordingText(title);
   const featuredArtists: string[] = [];
   const withoutFeatured = removeFeaturedCredits(normalized, featuredArtists);
+  const versionDescriptors = collectVersionDescriptors(withoutFeatured);
   const facets = matchingFacets(withoutFeatured);
+  const fromDescriptors = facetsFromDescriptors(versionDescriptors);
   const baseTitle = stripFacetSegments(withoutFeatured)
     .replace(/[([{（【]\s*[)\]}）】]/gu, " ")
     .replace(/\s+/gu, " ")
@@ -116,14 +129,71 @@ export function parseRecordingMetadata(title: string): ParsedRecordingMetadata {
   return {
     baseTitle: baseTitle || normalized,
     featuredArtists: [...new Set(featuredArtists.map(normalizeRecordingText).filter(Boolean))],
-    recordingFacets: [
-      ...new Set(facets.filter((rule) => rule.category === "recording").map((rule) => rule.facet))
-    ].sort(),
-    structuralFacets: [
-      ...new Set(facets.filter((rule) => rule.category === "structural").map((rule) => rule.facet))
-    ].sort(),
-    releaseFacets: [...new Set(facets.filter((rule) => rule.category === "release").map((rule) => rule.facet))].sort()
+    recordingFacets: uniqueSorted([
+      ...fromDescriptors.recordingFacets,
+      ...facets.filter((rule) => rule.category === "recording").map((rule) => rule.facet)
+    ]),
+    structuralFacets: uniqueSorted([
+      ...fromDescriptors.structuralFacets,
+      ...facets.filter((rule) => rule.category === "structural").map((rule) => rule.facet)
+    ]),
+    releaseFacets: uniqueSorted([
+      ...fromDescriptors.releaseFacets,
+      ...facets.filter((rule) => rule.category === "release").map((rule) => rule.facet)
+    ]),
+    versionDescriptors
   };
+}
+
+function uniqueSorted(values: readonly string[]): string[] {
+  return [...new Set(values)].sort();
+}
+
+function collectVersionDescriptors(title: string): ParsedRecordingMetadata["versionDescriptors"] {
+  const descriptors: ParsedRecordingMetadata["versionDescriptors"] = [];
+  const seen = new Set<string>();
+  const consider = (segment: string) => {
+    const classified = classifyVersionSegment(segment);
+    if (!classified) return;
+    const key = `${classified.kind}:${classified.payload}:${classified.ordinal ?? ""}:${classified.identityRelevant ?? ""}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    descriptors.push(classified);
+  };
+  for (const match of title.matchAll(WRAPPED_SEGMENT)) consider(match[2]);
+  const suffix = title.match(/\s*[-:：]\s*([^\n]+)$/u);
+  if (suffix) consider(suffix[1]);
+  const trailing = title.match(
+    /(?<=\S)\s+((?:(?:album\s+)?(?:extended|long|full)\s*(?:mix|version|ver\.?)?|radio\s+(?:edit|version)|off[\s_-]*vocal|instrumental(?:\s+version)?|karaoke|live|remix|cover|#\s*\d+\s*ver(?:sion)?\.?|[\p{L}\p{N}_+.-]+\s+ver(?:sion)?\.?)\s*)$/iu
+  );
+  if (trailing) consider(trailing[1]);
+  return descriptors;
+}
+
+function facetsFromDescriptors(descriptors: ParsedRecordingMetadata["versionDescriptors"]): {
+  recordingFacets: string[];
+  structuralFacets: string[];
+  releaseFacets: string[];
+} {
+  const recordingFacets: string[] = [];
+  const structuralFacets: string[] = [];
+  const releaseFacets: string[] = [];
+  for (const descriptor of descriptors) {
+    if (descriptor.category === "recording") {
+      recordingFacets.push(descriptor.kind === "tv" ? "edit" : descriptor.kind);
+    } else if (descriptor.category === "structural") {
+      structuralFacets.push(descriptor.kind);
+    } else if (descriptor.kind === "anniversary" && descriptor.identityRelevant === false) {
+      releaseFacets.push("anniversary");
+    } else if (descriptor.kind === "remaster") {
+      releaseFacets.push("remaster");
+    } else if (descriptor.payload === "theme") {
+      releaseFacets.push("theme");
+    } else if (descriptor.category === "named" || descriptor.kind === "anniversary") {
+      structuralFacets.push("generic_version");
+    }
+  }
+  return { recordingFacets, structuralFacets, releaseFacets };
 }
 
 function characterNgrams(value: string, size: number): string[] {
@@ -198,30 +268,57 @@ export function tokenSimilarity(left: string, right: string): number {
   return roundEvidence(multisetDice(tokens(left), tokens(right)));
 }
 
+export function identityCompactText(value: string): string {
+  return foldHanToSimplified(normalizeRecordingText(value)).replace(/[^\p{L}\p{N}]/gu, "");
+}
+
 export function recordingTextSimilarity(left: string, right: string): number {
-  const a = normalizeRecordingText(left).replace(/[^\p{L}\p{N}]/gu, "");
-  const b = normalizeRecordingText(right).replace(/[^\p{L}\p{N}]/gu, "");
+  const a = identityCompactText(left);
+  const b = identityCompactText(right);
   if (!a || !b) return 0;
   if (a === b) return 1;
   return roundEvidence(
-    Math.max(characterNgramSimilarity(a, b), shortNameSimilarity(a, b), tokenSimilarity(left, right))
+    Math.max(
+      characterNgramSimilarity(a, b),
+      shortNameSimilarity(a, b),
+      tokenSimilarity(foldHanToSimplified(left), foldHanToSimplified(right))
+    )
   );
 }
 
 export function splitArtistCredits(values: readonly string[]): string[] {
-  return values
-    .flatMap((value) =>
-      normalizeRecordingText(value)
-        .replace(/\b(?:feat(?:uring)?|ft|with)\.?\b/giu, ",")
-        .replace(/\s+(?:and|x)\s+/giu, ",")
-        .split(/[,;&/／、，+]|\s+&\s+/u)
-    )
+  const credits = values.flatMap((value) => {
+    const normalized = normalizeRecordingText(value);
+    return [...voiceActorCredits(normalized), ...splitCreditList(normalized)];
+  });
+  const seen = new Set<string>();
+  return credits
     .map((artist) => artist.trim())
-    .filter(Boolean);
+    .filter((artist) => {
+      if (!artist || seen.has(artist)) return false;
+      seen.add(artist);
+      return true;
+    });
 }
 
-function aliasKey(value: string): string {
-  return normalizeRecordingText(value).replace(/[^\p{L}\p{N}]/gu, "");
+function splitCreditList(normalized: string): string[] {
+  return normalized
+    .replace(/\b(?:feat(?:uring)?|ft|with)\.?\b/giu, ",")
+    .replace(/\s+(?:and|x)\s+/giu, ",")
+    .split(/[,;&/／、，+]|\s+&\s+/u);
+}
+
+/**
+ * `角色(CV:声优)` credits name the performer alongside the character. The performer is a real
+ * credit for the recording and is listed separately so it can be paired, while the character
+ * itself stays a distinct name rather than becoming an alias of the performer.
+ */
+function voiceActorCredits(normalized: string): string[] {
+  return [...normalized.matchAll(VOICE_ACTOR_PATTERN)].flatMap(([, performers]) => splitCreditList(performers));
+}
+
+export function aliasKey(value: string): string {
+  return identityCompactText(value);
 }
 
 const ALIAS_GROUP_BY_NAME = new Map<string, number>();
@@ -234,7 +331,8 @@ export function areApprovedArtistAliases(left: string, right: string): boolean {
   const rightKey = aliasKey(right);
   if (!leftKey || leftKey === rightKey) return false;
   const leftGroup = ALIAS_GROUP_BY_NAME.get(leftKey);
-  return leftGroup !== undefined && leftGroup === ALIAS_GROUP_BY_NAME.get(rightKey);
+  if (leftGroup !== undefined && leftGroup === ALIAS_GROUP_BY_NAME.get(rightKey)) return true;
+  return catalogNamesAreAliases(leftKey, rightKey, currentArtistAliasSnapshot());
 }
 
 function artistPair(left: string, right: string): AppleArtistPairEvidence {

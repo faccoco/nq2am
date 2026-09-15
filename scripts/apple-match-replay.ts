@@ -10,11 +10,12 @@ import {
   sweepRecordingThresholds,
   type ThresholdSweepItem
 } from "../src/apple/replay.js";
-import { DEFAULT_MATCH_PREFERENCES, type NormalizedTrack } from "../src/types.js";
+import { type AppleMatchResult, DEFAULT_MATCH_PREFERENCES, type NormalizedTrack } from "../src/types.js";
 
 type ReplayCase = {
   id: string;
   category: DecisionReplayCategory;
+  expectedStatus?: AppleMatchResult["status"];
   track: { name: string; artists: string[]; album: string; durationMs: number };
   expectedIds: string[];
   candidates: Array<{
@@ -100,6 +101,7 @@ for (const item of replayCases) {
   decisions.push({
     id: item.id,
     expectedCandidateIds: item.expectedIds,
+    expectedStatus: item.expectedStatus,
     result,
     category: item.category,
     provenance: item.provenance ?? "tests/fixtures/apple-recording-patterns.json"
@@ -131,9 +133,7 @@ for (const item of replayCases) {
     id: item.id,
     bestConfidence: result.decision?.bestGroupConfidence ?? 0,
     runnerUpConfidence: result.decision?.runnerUpGroupConfidence,
-    bestIsCorrect:
-      Boolean(result.selectedId && item.expectedIds.includes(result.selectedId)) ||
-      Boolean(result.recordingGroups?.[0]?.candidateIds.some((id) => item.expectedIds.includes(id))),
+    bestIsCorrect: Boolean(result.selectedId && item.expectedIds.includes(result.selectedId)),
     automaticEligible: result.recordingGroups?.[0]?.automaticEligible ?? false
   });
 }
@@ -157,7 +157,9 @@ const report = {
     "omitted structural suffixes",
     "duplicate releases",
     "recording-changing version hard negatives",
-    "bounded base-title retrieval escalation (unit replay)"
+    "bounded base-title retrieval escalation (unit replay)",
+    "Chinese version suffixes and Extended Mix as structural",
+    "named anniversary vs band arrangement"
   ],
   retrieval: evaluateRetrievalReplay(retrievalItems),
   decision: evaluateDecisionReplay(decisions),
@@ -168,7 +170,7 @@ const report = {
     [0.06, 0.08, 0.1, 0.12]
   ).slice(0, 12),
   limitations: [
-    "The corpus combines 40 confirmed release selections with seven category-balanced recording patterns.",
+    "The corpus combines 40 confirmed release selections with curated recording-pattern cases including Chinese version and Extended Mix regressions.",
     "No eligible persisted manual no-match corpus is checked in; unlabeled not-found rows are deliberately excluded.",
     "Saved candidate fixtures measure classifier behavior; live storefront recall is not inferred from unlabeled not-found rows."
   ]

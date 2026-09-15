@@ -107,6 +107,7 @@
     "exact": "完全一致",
     "open": "打开 ↗",
     "score": "评分 {{score}}",
+    "version": "版本：{{version}}",
     "explicit": "E"
   }
 }

@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import cors from "cors";
 import express from "express";
 import appleRouter from "./routes/apple.js";
+import artistAliasCatalogRouter from "./routes/artistAliasCatalog.js";
 import authRouter from "./routes/auth.js";
 import matchRouter from "./routes/match.js";
 import playlistsRouter from "./routes/playlists.js";
@@ -20,6 +21,7 @@ export async function startServer(port: number): Promise<void> {
   app.use("/api", playlistsRouter);
   app.use("/api", matchRouter);
   app.use("/api", preferencesRouter);
+  app.use("/api", artistAliasCatalogRouter);
 
   // Serve static SPA in production
   const webDist = join(__dirname, "..", "..", "web", "dist");

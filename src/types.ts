@@ -38,8 +38,15 @@ export type AppleMatchStatus =
   | "request_failed";
 
 /** Identifier for the recording-first score model. */
-export const CURRENT_SCORING_VERSION = 2 as const;
+export const CURRENT_SCORING_VERSION = 3 as const;
 export type AppleScoringVersion = typeof CURRENT_SCORING_VERSION;
+
+/** Locked v3 automatic-match threshold. Not user-tunable. */
+export const DECISION_THRESHOLD = 0.86;
+/** Locked v3 review threshold. Not user-tunable. */
+export const DECISION_REVIEW_THRESHOLD = 0.62;
+/** Locked v3 recording-group margin. Not user-tunable. */
+export const DECISION_AMBIGUOUS_GAP = 0.08;
 
 export type AppleQueryVariant =
   | "original_primary_artist"
@@ -77,12 +84,50 @@ export type AppleRetrievalDiagnostics = {
   cacheHits: number;
 };
 
+export type VersionDescriptorKind =
+  | "off_vocal"
+  | "instrumental"
+  | "karaoke"
+  | "live"
+  | "remix"
+  | "cover"
+  | "acoustic"
+  | "demo"
+  | "tv"
+  | "edit"
+  | "extended"
+  | "long"
+  | "full"
+  | "radio_edit"
+  | "album_version"
+  | "anniversary"
+  | "remaster"
+  | "language"
+  | "piano"
+  | "band"
+  | "orchestral"
+  | "game"
+  | "named";
+
+export type VersionDescriptor = {
+  category: "recording" | "structural" | "release" | "named";
+  kind: VersionDescriptorKind;
+  ordinal?: string;
+  payload: string;
+  raw: string;
+  /** False for release-only labels that must not participate in recording identity. */
+  identityRelevant?: boolean;
+};
+
+export type VersionRelation = "agree" | "structural_omit" | "named_omit" | "conflict";
+
 export type ParsedRecordingMetadata = {
   baseTitle: string;
   featuredArtists: string[];
   recordingFacets: string[];
   structuralFacets: string[];
   releaseFacets: string[];
+  versionDescriptors: VersionDescriptor[];
 };
 
 export type AppleArtistPairEvidence = {
@@ -109,6 +154,9 @@ export type AppleCandidateEvidence = {
   artist: AppleArtistEvidence;
   durationSimilarity: number;
   versionCompatibility: number;
+  versionRelation: VersionRelation;
+  /** The candidate is labelled as a version variant that the source title never asked for. */
+  unrequestedStructuralVariant: boolean;
   albumSimilarity: number;
   albumBonus: number;
   artworkBonus: number;
@@ -132,6 +180,8 @@ export type AppleRecordingGroupEvidence = {
   selectedReleaseId?: string;
   decisiveEvidence: string[];
   conflicts: string[];
+  versionRelation?: VersionRelation;
+  versionConflict?: { source: string; candidate: string };
 };
 
 export type AppleDecisionDiagnostics = {
@@ -240,13 +290,13 @@ export type AppleMatchReport = {
  * through the Settings UI — never hand-written.
  */
 export type MatchPreferences = {
-  /** Score and decision model associated with all numeric controls below. */
+  /** Score and decision model associated with the locked decision constants. */
   scoringVersion: AppleScoringVersion;
-  /** Minimum recording-group confidence for an automatic match (0–1). */
+  /** Minimum recording-group confidence for an automatic match (0–1). Locked for the current scoring version. */
   threshold: number;
-  /** Minimum recording-group confidence retained for manual review (0–1). */
+  /** Minimum recording-group confidence retained for manual review (0–1). Locked for the current scoring version. */
   reviewThreshold: number;
-  /** Required best-group minus runner-up-group margin for automatic selection. */
+  /** Required best-group minus runner-up-group margin for automatic selection. Locked for the current scoring version. */
   ambiguousGap: number;
   /** Favor candidates whose duration is closest to the source track. */
   preferDurationMatch: boolean;
@@ -289,9 +339,9 @@ export type MatchPreferences = {
 
 export const DEFAULT_MATCH_PREFERENCES: MatchPreferences = {
   scoringVersion: CURRENT_SCORING_VERSION,
-  threshold: 0.86,
-  reviewThreshold: 0.62,
-  ambiguousGap: 0.08,
+  threshold: DECISION_THRESHOLD,
+  reviewThreshold: DECISION_REVIEW_THRESHOLD,
+  ambiguousGap: DECISION_AMBIGUOUS_GAP,
   preferDurationMatch: true,
   explicitPreference: "none",
   preferOriginalVersion: true,

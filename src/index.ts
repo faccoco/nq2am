@@ -14,14 +14,44 @@ export {
   appleSongsByIsrc,
   createAppleApiSession
 } from "./apple/api.js";
+export type {
+  ArtistAliasCatalogProgress,
+  ArtistAliasCatalogStatus,
+  ArtistAliasDumpFetcher
+} from "./apple/artistAliasCatalog.js";
+export {
+  cancelArtistAliasCatalogDownload,
+  compileArtistAliasGroups,
+  getArtistAliasCatalogStatus,
+  loadArtistAliasCatalogSnapshot,
+  MUSICBRAINZ_ATTRIBUTION,
+  musicBrainzSnapshotDate,
+  musicbrainzNames,
+  parseMusicBrainzArtistDump,
+  parseVocadbArtistDump,
+  readArtistAliasCatalogStatus,
+  refreshArtistAliasCatalog,
+  requestArtistAliasCatalogRefresh,
+  TOUHOUDB_ATTRIBUTION,
+  UTAITEDB_ATTRIBUTION,
+  VOCADB_ATTRIBUTION,
+  vocadbNames
+} from "./apple/artistAliasCatalog.js";
 export type { ArtistAliasSuggestion } from "./apple/artistAliases.js";
 export { extractArtistAliasSuggestions, REVIEWED_ARTIST_ALIASES } from "./apple/artistAliases.js";
+export {
+  catalogNamesAreAliases,
+  runWithArtistAliasSnapshot,
+  snapshotFromCatalogFile
+} from "./apple/artistAliasIndex.js";
+export { foldHanToSimplified } from "./apple/hanFold.js";
 export type { AppleMatchExecutionOptions, AppleMatchLogEvent } from "./apple/matcher.js";
 export {
   createAppleMusicPlaylist,
   createAppleMusicPlaylistFromReport,
   detectStorefrontForTrack,
   matchAppleMusic,
+  matchSingleTrack,
   refreshAppleMatchReportCandidates,
   resolveAppleMusicTrackIds,
   retryAppleMusicResults,
@@ -31,6 +61,7 @@ export {
   areApprovedArtistAliases,
   characterNgramSimilarity,
   compareArtistCredits,
+  identityCompactText,
   normalizeRecordingText,
   parseRecordingMetadata,
   recordingTextSimilarity,
@@ -53,9 +84,12 @@ export {
   appleQueryCacheKey,
   buildAppleQueryPlan,
   DEFAULT_APPLE_QUERY_BUDGET,
+  extraNativeStorefrontsForTrack,
+  queryPlanForTrack,
   unionAppleSearchCandidates
 } from "./apple/retrieval.js";
 export { albumSimilarity, durationSimilarity, scoreAppleRecordingEvidence, scoreAppleSong } from "./apple/scoring.js";
+export { compareVersionRelation } from "./apple/versionSemantics.js";
 export { interactiveLogin, loadCookies, saveCookies } from "./fetchers/auth.js";
 export { closeBrowser, fetchWithBrowser } from "./fetchers/browser.js";
 export { fetchNeteasePlaylist, parseNeteasePlaylistId } from "./fetchers/netease.js";

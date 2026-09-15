@@ -7,6 +7,12 @@ import {
   recordingTextSimilarity,
   roundEvidence
 } from "./recordingMetadata.js";
+import {
+  candidateCarriesUnrequestedNamedVersion,
+  compareVersionRelation,
+  NAMED_VERSION_CONFLICT_CAP,
+  versionConflictSummary
+} from "./versionSemantics.js";
 
 type ScoreField = keyof AppleScoreBreakdown["fields"];
 
@@ -64,40 +70,63 @@ function versionEvidence(
   sourceDurationMs: number | undefined,
   candidateDurationMs: number | undefined,
   enforceVersions: boolean
-): { score: number; incompatibilities: string[]; decisiveEvidence: string[] } {
-  if (!enforceVersions) return { score: 1, incompatibilities: [], decisiveEvidence: [] };
+): {
+  score: number;
+  incompatibilities: string[];
+  decisiveEvidence: string[];
+  unrequestedVariant: boolean;
+  relation: ReturnType<typeof compareVersionRelation>;
+} {
   const source = parseRecordingMetadata(sourceTitle);
   const candidate = parseRecordingMetadata(candidateTitle);
+  const unrequestedVariant = candidateCarriesUnrequestedNamedVersion(source, candidate);
+  if (!enforceVersions) {
+    return { score: 1, incompatibilities: [], decisiveEvidence: [], unrequestedVariant, relation: "agree" };
+  }
   const incompatibilities: string[] = [];
   const decisiveEvidence: string[] = [];
+  const relation = compareVersionRelation(source, candidate);
 
   if (!sameSet(source.recordingFacets, candidate.recordingFacets)) {
     incompatibilities.push(
       `recording version differs (${source.recordingFacets.join(", ") || "original"} vs ${candidate.recordingFacets.join(", ") || "original"})`
     );
-    return { score: 0, incompatibilities, decisiveEvidence };
+    return { score: 0, incompatibilities, decisiveEvidence, unrequestedVariant, relation: "conflict" };
   }
   if (source.recordingFacets.length > 0)
     decisiveEvidence.push(`requested ${source.recordingFacets.join(", ")} version agrees`);
 
-  if (sameSet(source.structuralFacets, candidate.structuralFacets)) {
-    return { score: 1, incompatibilities, decisiveEvidence };
+  if (relation === "conflict") {
+    const summary = versionConflictSummary(source, candidate);
+    incompatibilities.push(
+      summary ? `named version differs (${summary.source} vs ${summary.candidate})` : "named version differs"
+    );
+    return { score: 0, incompatibilities, decisiveEvidence, unrequestedVariant, relation };
+  }
+
+  if (relation === "agree") {
+    return { score: 1, incompatibilities, decisiveEvidence, unrequestedVariant, relation };
+  }
+
+  if (relation === "named_omit") {
+    decisiveEvidence.push("named version label is present on only one title");
+    return { score: 0.92, incompatibilities, decisiveEvidence, unrequestedVariant, relation };
   }
 
   if (sourceDurationMs && candidateDurationMs) {
     const difference = Math.abs(sourceDurationMs - candidateDurationMs);
     if (difference <= 4_000) {
       decisiveEvidence.push("structural title suffix differs but duration agrees");
-      return { score: 0.92, incompatibilities, decisiveEvidence };
+      return { score: 0.92, incompatibilities, decisiveEvidence, unrequestedVariant, relation };
     }
     if (difference > 15_000) {
       incompatibilities.push("structural version and duration disagree");
-      return { score: 0.15, incompatibilities, decisiveEvidence };
+      return { score: 0.15, incompatibilities, decisiveEvidence, unrequestedVariant, relation };
     }
-    return { score: 0.55, incompatibilities, decisiveEvidence };
+    return { score: 0.55, incompatibilities, decisiveEvidence, unrequestedVariant, relation };
   }
 
-  return { score: 0.7, incompatibilities, decisiveEvidence };
+  return { score: 0.7, incompatibilities, decisiveEvidence, unrequestedVariant, relation };
 }
 
 function activeIdentityWeights(hasDuration: boolean): AppleScoreBreakdown["weights"] {
@@ -161,6 +190,9 @@ export function scoreAppleRecordingEvidence(
   );
   const incompatibilities = [...version.incompatibilities];
   if (titleSimilarity < 0.42) incompatibilities.push("base title has insufficient similarity");
+  const namedConflict =
+    version.relation === "conflict" &&
+    version.incompatibilities.some((reason) => reason.startsWith("named version differs"));
   if (!artist.hasPrimaryRelationship) {
     // A title-only result may still be shown for review, but can never become
     // an automatic match and is capped below the default review boundary.
@@ -169,6 +201,7 @@ export function scoreAppleRecordingEvidence(
   if (version.incompatibilities.some((reason) => reason.startsWith("recording version differs"))) {
     identityConfidence = Math.min(identityConfidence, 0.35);
   }
+  if (namedConflict) identityConfidence = Math.min(identityConfidence, NAMED_VERSION_CONFLICT_CAP);
   if (version.incompatibilities.includes("structural version and duration disagree")) {
     identityConfidence = Math.min(identityConfidence, 0.48);
   }
@@ -176,13 +209,20 @@ export function scoreAppleRecordingEvidence(
 
   const albumBonus = album >= 0.82 ? roundScore(((album - 0.82) / 0.18) * 0.12) : 0;
   const confidence = roundScore(identityConfidence + albumBonus);
+  const versionAllowsDeterministic = version.relation === "agree" || version.relation === "structural_omit";
   const deterministicIdentity =
     baseTitleSimilarity === 1 &&
     artist.primaryPair >= 0.98 &&
     version.score >= 0.92 &&
+    versionAllowsDeterministic &&
     Boolean(track.durationMs && song.attributes.durationInMillis) &&
     duration >= 0.96 &&
     incompatibilities.length === 0;
+  const automaticEligible =
+    artist.hasPrimaryRelationship &&
+    incompatibilities.length === 0 &&
+    version.relation !== "named_omit" &&
+    version.relation !== "conflict";
   const decisiveEvidence = [...version.decisiveEvidence];
   if (baseTitleSimilarity === 1) decisiveEvidence.push("base title agrees exactly");
   if (artist.primaryPair >= 0.98) decisiveEvidence.push("primary artist agrees");
@@ -198,12 +238,14 @@ export function scoreAppleRecordingEvidence(
     artist,
     durationSimilarity: duration,
     versionCompatibility: version.score,
+    versionRelation: version.relation,
+    unrequestedStructuralVariant: version.unrequestedVariant,
     albumSimilarity: album,
     albumBonus,
     artworkBonus: 0,
     identityConfidence: roundScore(identityConfidence),
     confidence,
-    automaticEligible: artist.hasPrimaryRelationship && incompatibilities.length === 0,
+    automaticEligible,
     deterministicIdentity,
     incompatibilities,
     decisiveEvidence

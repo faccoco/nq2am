@@ -10,6 +10,7 @@ import type {
 import type { CandidateSimilarity } from "./artwork.js";
 import { compareArtistCredits, recordingTextSimilarity } from "./recordingMetadata.js";
 import { roundScore } from "./scoring.js";
+import { compareVersionRelation, versionConflictSummary, versionsCanGroup } from "./versionSemantics.js";
 
 export type CoverSimilarityChooser = (
   track: NormalizedTrack,
@@ -36,16 +37,15 @@ function compatibleVersion(left: AppleCandidate, right: AppleCandidate): boolean
   const leftEvidence = left.evidence;
   const rightEvidence = right.evidence;
   if (!leftEvidence || !rightEvidence) return false;
+  if (!versionsCanGroup(leftEvidence.parsedCandidate, rightEvidence.parsedCandidate)) return false;
   if (
     leftEvidence.parsedCandidate.recordingFacets.join("|") !== rightEvidence.parsedCandidate.recordingFacets.join("|")
   ) {
     return false;
   }
-  if (
-    leftEvidence.parsedCandidate.structuralFacets.join("|") === rightEvidence.parsedCandidate.structuralFacets.join("|")
-  ) {
-    return true;
-  }
+  const relation = compareVersionRelation(leftEvidence.parsedCandidate, rightEvidence.parsedCandidate);
+  if (relation === "agree") return true;
+  if (relation === "named_omit") return false;
   const difference = durationDifference(left, right);
   return difference !== undefined && difference <= 4_000;
 }
@@ -64,8 +64,33 @@ function metadataCompatible(left: AppleCandidate, right: AppleCandidate, isrcBac
   if (isrcBacked) {
     return title >= 0.8 && artist.primaryPair >= 0.65 && (difference === undefined || difference <= 12_000);
   }
-  if (left.isrc && right.isrc && left.isrc !== right.isrc) return false;
-  return title >= 0.96 && artist.primaryPair >= 0.82 && difference !== undefined && difference <= 4_000;
+  if (left.isrc && right.isrc && left.isrc !== right.isrc) {
+    // A recording is commonly re-registered per release, so two releases of one recording often
+    // carry different ISRCs. Differing codes therefore only raise the bar for grouping instead of
+    // ruling it out, which otherwise leaves duplicate releases competing as rival recordings.
+    return (
+      title >= 0.98 &&
+      artist.primaryPair >= 0.9 &&
+      difference !== undefined &&
+      difference <= 2_000 &&
+      featuredCreditsAgree(leftEvidence, rightEvidence)
+    );
+  }
+  return title >= 0.96 && artist.primaryPair >= 0.82 && difference !== undefined && difference <= 10_000;
+}
+
+/** Featured performers only block grouping when both sides name performers and they disagree. */
+function featuredCreditsAgree(
+  leftEvidence: NonNullable<AppleCandidate["evidence"]>,
+  rightEvidence: NonNullable<AppleCandidate["evidence"]>
+): boolean {
+  const leftNames = leftEvidence.parsedCandidate.featuredArtists;
+  const rightNames = rightEvidence.parsedCandidate.featuredArtists;
+  if (leftNames.length === 0 && rightNames.length === 0) return true;
+  if (leftNames.length === 0 || rightNames.length === 0) {
+    return compareVersionRelation(leftEvidence.parsedCandidate, rightEvidence.parsedCandidate) !== "conflict";
+  }
+  return compareArtistCredits(leftNames, rightNames).hasPrimaryRelationship;
 }
 
 function candidatesCanGroup(left: AppleCandidate, right: AppleCandidate): boolean {
@@ -155,6 +180,23 @@ function strongestCandidate(group: MutableRecordingGroup): AppleCandidate {
   )[0];
 }
 
+/**
+ * The plain recording and a labelled variant of it routinely land within a hair of each other,
+ * because a duration inside the two-second tolerance scores the same either way and the version
+ * weight alone is tiny. When only the runner-up carries a label the source never asked for, that
+ * label is itself the separation, so the thin score gap is not genuine ambiguity.
+ */
+function versionLabelSeparates(
+  best: MutableRecordingGroup | undefined,
+  runnerUp: MutableRecordingGroup | undefined
+): boolean {
+  if (!best || !runnerUp) return false;
+  const bestEvidence = strongestCandidate(best).evidence;
+  const runnerUpEvidence = strongestCandidate(runnerUp).evidence;
+  if (!bestEvidence || !runnerUpEvidence) return false;
+  return !bestEvidence.unrequestedStructuralVariant && runnerUpEvidence.unrequestedStructuralVariant;
+}
+
 function toGroupEvidence(
   group: MutableRecordingGroup,
   selectedRelease: AppleCandidate | undefined
@@ -172,7 +214,9 @@ function toGroupEvidence(
     strongestCandidateId: strongest.id,
     selectedReleaseId: selectedRelease?.id,
     decisiveEvidence: evidence?.decisiveEvidence ?? [],
-    conflicts: group.conflicts
+    conflicts: group.conflicts,
+    versionRelation: evidence?.versionRelation,
+    versionConflict: evidence ? versionConflictSummary(evidence.parsedSource, evidence.parsedCandidate) : undefined
   };
 }
 
@@ -245,7 +289,10 @@ export async function resolveRecordingDecision(
     (left, right) => groupConfidence(right) - groupConfidence(left) || left.id.localeCompare(right.id)
   );
   const best = groups[0];
-  const runnerUp = groups[1];
+  const rivalGroups = groups.filter((group) =>
+    group.candidates.some((candidate) => candidate.evidence?.automaticEligible ?? false)
+  );
+  const runnerUp = rivalGroups.find((group) => group !== best);
   const bestConfidence = best ? groupConfidence(best) : undefined;
   const runnerUpConfidence = runnerUp ? groupConfidence(runnerUp) : undefined;
   const margin = bestConfidence === undefined ? undefined : roundScore(bestConfidence - (runnerUpConfidence ?? 0));
@@ -255,7 +302,11 @@ export async function resolveRecordingDecision(
     best?.candidates.some((candidate) => candidate.evidence?.automaticEligible ?? true) ?? false;
   const deterministic =
     best?.candidates.some((candidate) => candidate.evidence?.deterministicIdentity ?? false) ?? false;
-  const decisiveEvidence = best ? (strongestCandidate(best).evidence?.decisiveEvidence ?? []) : [];
+  const labelSeparatesRunnerUp = versionLabelSeparates(best, runnerUp);
+  const decisiveEvidence = best ? [...(strongestCandidate(best).evidence?.decisiveEvidence ?? [])] : [];
+  if (labelSeparatesRunnerUp) {
+    decisiveEvidence.push("runner-up advertises a version the source did not ask for");
+  }
   const decision: AppleDecisionDiagnostics = {
     scoringVersion: prefs.scoringVersion,
     bestGroupConfidence: bestConfidence,
@@ -277,7 +328,7 @@ export async function resolveRecordingDecision(
   };
 
   const passes = retrievalSummary(retrieval);
-  const meetsMargin = margin !== undefined && margin >= prefs.ambiguousGap;
+  const meetsMargin = margin !== undefined && (margin >= prefs.ambiguousGap || labelSeparatesRunnerUp);
   const automatic =
     winner &&
     bestAutomaticEligible &&

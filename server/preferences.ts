@@ -57,10 +57,13 @@ function validate(input: unknown): { preferences: MatchPreferences; migrated: bo
     if (!knownKeys.has(key)) throw new PreferencesValidationError(`Unknown preference: ${key}`);
   }
 
-  const legacy = p.scoringVersion === undefined;
-  if (!legacy && p.scoringVersion !== CURRENT_SCORING_VERSION) {
-    throw new PreferencesValidationError(`Unsupported scoringVersion: ${String(p.scoringVersion)}`);
+  const requestedVersion = p.scoringVersion;
+  const migratable =
+    requestedVersion === undefined || requestedVersion === 2 || requestedVersion === CURRENT_SCORING_VERSION;
+  if (!migratable) {
+    throw new PreferencesValidationError(`Unsupported scoringVersion: ${String(requestedVersion)}`);
   }
+
   const explicit = p.explicitPreference ?? d.explicitPreference;
   if (explicit !== "explicit" && explicit !== "clean" && explicit !== "none") {
     throw new PreferencesValidationError("explicitPreference must be explicit, clean, or none");
@@ -79,22 +82,17 @@ function validate(input: unknown): { preferences: MatchPreferences; migrated: bo
     throw new PreferencesValidationError("appleRandomPauseMinMs must be less than or equal to appleRandomPauseMaxMs");
   }
 
-  // Legacy score values are deliberately ignored: v1 and v2 distributions are
-  // not linearly compatible. Non-scoring settings remain intact.
-  const threshold = legacy ? d.threshold : readNumber(p, "threshold", d.threshold, 0, 1);
-  const reviewThreshold = legacy ? d.reviewThreshold : readNumber(p, "reviewThreshold", d.reviewThreshold, 0, 1);
-  const ambiguousGap = legacy ? d.ambiguousGap : readNumber(p, "ambiguousGap", d.ambiguousGap, 0, 1);
-  if (reviewThreshold > threshold) {
-    throw new PreferencesValidationError("reviewThreshold must be less than or equal to threshold");
-  }
+  // Decision thresholds are internals of the current scoring version. Legacy
+  // files and stale clients may still send the keys; accept and ignore them.
+  const migrated = requestedVersion !== CURRENT_SCORING_VERSION;
 
   return {
-    migrated: legacy,
+    migrated,
     preferences: {
       scoringVersion: CURRENT_SCORING_VERSION,
-      threshold,
-      reviewThreshold,
-      ambiguousGap,
+      threshold: d.threshold,
+      reviewThreshold: d.reviewThreshold,
+      ambiguousGap: d.ambiguousGap,
       preferDurationMatch: readBoolean(p, "preferDurationMatch", d.preferDurationMatch),
       explicitPreference: explicit,
       preferOriginalVersion: readBoolean(p, "preferOriginalVersion", d.preferOriginalVersion),

@@ -28,7 +28,7 @@
   "matching": {
     "title": "匹配",
     "scoringVersion": "评分模型 v{{version}}",
-    "description": "nq2am 会通过有上限的查询序列检索候选项，把重复发行合并为录音组，并只自动选择明显胜出的录音。合理候选进入「存在歧义」，低于复核阈值的已检索候选进入「评分未通过」。",
+    "description": "nq2am 会通过有上限的查询序列检索候选项，把重复发行合并为录音组，并只自动选择明显胜出的录音。自动匹配、复核和间隔阈值锁定在当前评分模型内；合理候选进入「存在歧义」，低于复核阈值的已检索候选进入「评分未通过」。",
     "loading": "正在加载匹配偏好…",
     "threshold": {
       "label": "自动匹配阈值：",
@@ -75,7 +75,39 @@
         "text": "按文字（汉字 → 日本区）"
       },
       "help": "如果网易/QQ 里有很多日文歌，可以尝试按文字。",
-      "tooltip": "「按来源」会把来自网易/QQ 的纯汉字歌曲当作中国区，但假名仍会判为日本区、韩文仍会判为韩国区。「按文字」会把纯汉字标题当作日文处理，适合中文平台上的 Vocaloid/J-pop 专辑。"
+      "tooltip": "「按来源」仍会给网易/QQ 的纯汉字标题额外搜日本区（例如《炎》），而不是只停在中国区。假名仍是日本区，韩文仍是韩国区。「按文字」会把纯汉字标题优先当日文处理。"
+    },
+    "aliasCatalog": {
+      "title": "艺人别名库",
+      "description": "下载 MusicBrainz（一般艺人）、VocaDB（V家）、UtaiteDB（歌い手）和 TouhouDB（东方）的艺人名称 dump，编译成本地别名索引。dump 会一个一个下，每个 dump 内部分成多段并行下载（这些站点按连接限速，多连接快很多）。中断后再次下载会从断点继续；已经下完且没更新的 dump 会跳过。匹配过程中不会去下载这些 dump。",
+      "download": "下载别名库",
+      "redownload": "重新下载",
+      "downloading": "正在下载…",
+      "downloadingSource": "正在下载 {{source}}…",
+      "listing": "正在查找 dump…",
+      "compiling": "正在编译索引…",
+      "cancel": "取消",
+      "idleNever": "还没有下载别名库。随包别名仍然可用。",
+      "idleReady": "{{count}} 组 · {{sources}}",
+      "downloadedAt": "下载日期：{{date}}",
+      "dumpDate": "数据日期：{{date}}",
+      "failed": "下载失败，仍使用上一份索引。",
+      "cancelled": "已取消下载。",
+      "progressPercent": "{{percent}}%",
+      "progressSize": "{{received}} / {{total}}",
+      "progressSpeed": "{{speed}}/s",
+      "progressEta": "剩余 {{eta}}",
+      "etaHoursMinutes": "{{hours}} 小时 {{minutes}} 分",
+      "etaHours": "{{hours}} 小时",
+      "etaMinutes": "{{minutes}} 分",
+      "etaSeconds": "{{seconds}} 秒",
+      "sources": {
+        "musicbrainz": "MusicBrainz",
+        "vocadb": "VocaDB",
+        "utaitedb": "UtaiteDB",
+        "touhoudb": "TouhouDB"
+      },
+      "tooltip": "日文罗马字或简繁写法对不上时用这个。VocaDB 只覆盖 V家，歌い手走 UtaiteDB，东方走 TouhouDB，其他艺人走 MusicBrainz。不会导入 search hint 和法律名。已经在跑的匹配任务会继续用它开始时的那份索引。"
     },
     "performance": {
       "title": "性能与请求节奏",

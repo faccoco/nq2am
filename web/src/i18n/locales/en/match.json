@@ -107,6 +107,7 @@
     "exact": "exact",
     "open": "open ↗",
     "score": "score {{score}}",
+    "version": "version: {{version}}",
     "explicit": "E"
   }
 }

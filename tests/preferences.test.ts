@@ -44,7 +44,7 @@ test("legacy preferences reset score controls and preserve Apple request default
   const { setPreferences } = await import("../server/preferences.js");
   const prefs = await setPreferences({ threshold: 0.8, matchConcurrency: 5, storefront: "JP" });
 
-  assert.equal(prefs.scoringVersion, 2);
+  assert.equal(prefs.scoringVersion, 3);
   assert.equal(prefs.threshold, DEFAULT_MATCH_PREFERENCES.threshold);
   assert.equal(prefs.reviewThreshold, DEFAULT_MATCH_PREFERENCES.reviewThreshold);
   assert.equal(prefs.ambiguousGap, DEFAULT_MATCH_PREFERENCES.ambiguousGap);
@@ -54,6 +54,24 @@ test("legacy preferences reset score controls and preserve Apple request default
   assert.equal(prefs.appleRequestTimeoutMs, DEFAULT_MATCH_PREFERENCES.appleRequestTimeoutMs);
   assert.equal(prefs.appleRandomPauseEnabled, true);
   assert.equal(prefs.artworkTimeoutMs, DEFAULT_MATCH_PREFERENCES.artworkTimeoutMs);
+});
+
+test("v2 preferences migrate to locked v3 decision constants", async () => {
+  const { setPreferences } = await import("../server/preferences.js");
+  const prefs = await setPreferences({
+    scoringVersion: 2,
+    threshold: 0.9,
+    reviewThreshold: 0.5,
+    ambiguousGap: 0.2,
+    matchConcurrency: 4,
+    storefront: "jp"
+  });
+  assert.equal(prefs.scoringVersion, 3);
+  assert.equal(prefs.threshold, DEFAULT_MATCH_PREFERENCES.threshold);
+  assert.equal(prefs.reviewThreshold, DEFAULT_MATCH_PREFERENCES.reviewThreshold);
+  assert.equal(prefs.ambiguousGap, DEFAULT_MATCH_PREFERENCES.ambiguousGap);
+  assert.equal(prefs.matchConcurrency, 4);
+  assert.equal(prefs.storefront, "jp");
 });
 
 test("unsupported scoring versions are rejected without modifying storage", async () => {

@@ -49,7 +49,9 @@
   "dependencies": {
     "cors": "^2.8.6",
     "express": "^5.2.1",
+    "fflate": "^0.8.3",
     "open": "^11.0.0",
-    "playwright": "^1.61.1"
+    "playwright": "^1.61.1",
+    "xz-decompress": "^0.2.3"
   }
 }

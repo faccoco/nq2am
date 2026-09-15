@@ -28,7 +28,7 @@
   "matching": {
     "title": "Matching",
     "scoringVersion": "Scoring model v{{version}}",
-    "description": "nq2am retrieves candidates with a bounded query cascade, resolves duplicate releases into recordings, and auto-selects only decisive recording groups. Plausible results go to Ambiguous; retrieved candidates below the review threshold go to Score rejected.",
+    "description": "nq2am retrieves candidates with a bounded query cascade, resolves duplicate releases into recordings, and auto-selects only decisive recording groups. Decision thresholds are locked to the current scoring model; plausible results go to Ambiguous, and retrieved candidates below the review threshold go to Score rejected.",
     "loading": "Loading matching preferences…",
     "threshold": {
       "label": "Automatic match threshold:",
@@ -75,7 +75,39 @@
         "text": "By text (kanji → Japan)"
       },
       "help": "Use text mode when many Japanese songs come from NetEase or QQ.",
-      "tooltip": "\"By source\" treats Han-only tracks from NetEase/QQ as China, while kana still maps to Japan and hangul maps to Korea. \"By text\" treats Han-only titles as Japanese, which helps Vocaloid/J-pop albums hosted on Chinese providers."
+      "tooltip": "By source still searches Japan for Han-only titles from NetEase/QQ (for example 炎) instead of stopping at China. Kana stays Japan and Hangul stays Korea. By text treats Han-only titles as Japanese first."
+    },
+    "aliasCatalog": {
+      "title": "Artist alias catalog",
+      "description": "Downloads MusicBrainz (general artists), VocaDB (Vocaloid), UtaiteDB (utaite), and TouhouDB (Touhou) artist-name dumps and compiles a local alias index. Dumps download one at a time, each split into segments fetched in parallel because these hosts throttle per connection. Interrupted downloads resume from the last byte; unchanged completed dumps are skipped. Matching never downloads these dumps itself.",
+      "download": "Download alias catalog",
+      "redownload": "Download again",
+      "downloading": "Downloading…",
+      "downloadingSource": "Downloading {{source}}…",
+      "listing": "Looking up dumps…",
+      "compiling": "Compiling index…",
+      "cancel": "Cancel",
+      "idleNever": "No alias catalog downloaded yet. Bundled aliases still work.",
+      "idleReady": "{{count}} groups · {{sources}}",
+      "downloadedAt": "Download date: {{date}}",
+      "dumpDate": "Dump date: {{date}}",
+      "failed": "Download failed. The previous index is still in use.",
+      "cancelled": "Download cancelled.",
+      "progressPercent": "{{percent}}%",
+      "progressSize": "{{received}} / {{total}}",
+      "progressSpeed": "{{speed}}/s",
+      "progressEta": "{{eta}} left",
+      "etaHoursMinutes": "{{hours}}h {{minutes}}m",
+      "etaHours": "{{hours}}h",
+      "etaMinutes": "{{minutes}}m",
+      "etaSeconds": "{{seconds}}s",
+      "sources": {
+        "musicbrainz": "MusicBrainz",
+        "vocadb": "VocaDB",
+        "utaitedb": "UtaiteDB",
+        "touhoudb": "TouhouDB"
+      },
+      "tooltip": "Use this when Japanese romanizations or Chinese script variants are missing. VocaDB covers Vocaloid names, UtaiteDB covers utaite, TouhouDB covers Touhou, and MusicBrainz covers everyone else. Search hints and legal names are not imported. A matching job already in progress keeps the index it started with."
     },
     "performance": {
       "title": "Performance and request pacing",

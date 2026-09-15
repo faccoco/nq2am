@@ -173,6 +173,164 @@
           "isrc": "JP-BURN"
         }
       ]
+    },
+    {
+      "id": "extended-mix-not-remix",
+      "category": "omitted_suffix",
+      "track": {
+        "name": "World Vanquisher",
+        "artists": ["void"],
+        "album": "Perfect Solitude",
+        "durationMs": 355000
+      },
+      "expectedIds": ["world-extended-mix"],
+      "candidates": [
+        {
+          "id": "world-extended-mix",
+          "name": "World Vanquisher (Extended Mix)",
+          "artist": "void(Mournfinale)",
+          "album": "Compilation",
+          "durationMs": 357000,
+          "isrc": "JP-WORLD-XMIX"
+        },
+        {
+          "id": "world-remix",
+          "name": "World Vanquisher (Remix)",
+          "artist": "Other",
+          "album": "Remixes",
+          "durationMs": 355000,
+          "isrc": "JP-WORLD-REMIX"
+        }
+      ]
+    },
+    {
+      "id": "qifengle-soundtrack-suffix",
+      "category": "omitted_suffix",
+      "track": {
+        "name": "起风了 (电影《乘风破浪》主题曲)",
+        "artists": ["买辣椒也用券"],
+        "album": "起风了",
+        "durationMs": 311000
+      },
+      "expectedIds": ["qifengle"],
+      "candidates": [
+        {
+          "id": "qifengle",
+          "name": "起风了",
+          "artist": "买辣椒也用券",
+          "album": "起风了",
+          "durationMs": 311000,
+          "isrc": "CN-QIFENGLE"
+        }
+      ]
+    },
+    {
+      "id": "qifengle-banzou-negative",
+      "category": "recording_version",
+      "track": {
+        "name": "起风了 (伴奏)",
+        "artists": ["买辣椒也用券"],
+        "album": "起风了",
+        "durationMs": 311000
+      },
+      "expectedIds": ["qifengle-inst"],
+      "candidates": [
+        {
+          "id": "qifengle-vocal",
+          "name": "起风了",
+          "artist": "买辣椒也用券",
+          "album": "起风了",
+          "durationMs": 311000,
+          "isrc": "CN-QIFENGLE"
+        },
+        {
+          "id": "qifengle-inst",
+          "name": "起风了 (伴奏)",
+          "artist": "买辣椒也用券",
+          "album": "起风了",
+          "durationMs": 311000,
+          "isrc": "CN-QIFENGLE-INST"
+        }
+      ]
+    },
+    {
+      "id": "qifengle-dj-negative",
+      "category": "recording_version",
+      "track": {
+        "name": "起风了 (DJ版)",
+        "artists": ["买辣椒也用券"],
+        "album": "起风了",
+        "durationMs": 311000
+      },
+      "expectedIds": ["qifengle-dj"],
+      "candidates": [
+        {
+          "id": "qifengle-vocal-dj",
+          "name": "起风了",
+          "artist": "买辣椒也用券",
+          "album": "起风了",
+          "durationMs": 311000,
+          "isrc": "CN-QIFENGLE"
+        },
+        {
+          "id": "qifengle-dj",
+          "name": "起风了 (DJ版)",
+          "artist": "买辣椒也用券",
+          "album": "起风了",
+          "durationMs": 311000,
+          "isrc": "CN-QIFENGLE-DJ"
+        }
+      ]
+    },
+    {
+      "id": "takahashi-simplified-traditional",
+      "category": "alias_or_transliteration",
+      "track": {
+        "name": "一样的月光",
+        "artists": ["高桥优"],
+        "album": "一样的月光",
+        "durationMs": 240000
+      },
+      "expectedIds": ["takahashi-apple"],
+      "candidates": [
+        {
+          "id": "takahashi-apple",
+          "name": "一樣的月光",
+          "artist": "高橋優",
+          "album": "一樣的月光",
+          "durationMs": 240000
+        }
+      ]
+    },
+    {
+      "id": "usagi-kitsune-named-version",
+      "category": "recording_version",
+      "expectedStatus": "matched",
+      "track": {
+        "name": "弧ギツネの乱 (10th Anniversary ver.) [feat. 鏡音リン]",
+        "artists": ["まらしぃ", "鏡音リン"],
+        "album": "アマツキツネ 10th Anniversary",
+        "durationMs": 236000
+      },
+      "expectedIds": ["usagi-anniversary"],
+      "candidates": [
+        {
+          "id": "usagi-anniversary",
+          "name": "弧ギツネの乱 (10th Anniversary ver.) [feat. 鏡音リン]",
+          "artist": "marasy",
+          "album": "アマツキツネ 10th Anniversary",
+          "durationMs": 236000,
+          "isrc": "JP-USAGI-ANN"
+        },
+        {
+          "id": "usagi-band",
+          "name": "弧ギツネの乱 (まらおバンド ver.)",
+          "artist": "marasy",
+          "album": "アマツキツネ 10th Anniversary",
+          "durationMs": 234000,
+          "isrc": "JP-USAGI-BAND"
+        }
+      ]
     }
   ]
 }

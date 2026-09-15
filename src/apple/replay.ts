@@ -71,6 +71,7 @@ export type DecisionReplayCategory =
 export type DecisionReplayItem = {
   id: string;
   expectedCandidateIds: string[];
+  expectedStatus?: AppleMatchResult["status"];
   result: AppleMatchResult;
   category: DecisionReplayCategory;
   provenance: string;
@@ -105,6 +106,11 @@ export function evaluateDecisionReplay(items: readonly DecisionReplayItem[]): De
   const errorsByCategory: Partial<Record<DecisionReplayCategory, string[]>> = {};
 
   for (const item of items) {
+    if (item.expectedStatus && item.result.status !== item.expectedStatus) {
+      const categoryErrors = errorsByCategory[item.category] ?? [];
+      categoryErrors.push(`${item.id}: expected ${item.expectedStatus} got ${item.result.status}`);
+      errorsByCategory[item.category] = categoryErrors;
+    }
     if (item.result.status === "matched" && item.result.selectionSource !== "manual") {
       counts.automatic += 1;
       if (item.result.selectedId && item.expectedCandidateIds.includes(item.result.selectedId)) {

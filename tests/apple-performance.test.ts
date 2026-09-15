@@ -21,7 +21,14 @@ import { RequestStartScheduler, runWithRetry } from "../src/apple/requestSchedul
 import type { AppleMatchReport, NormalizedPlaylist } from "../src/types.js";
 import { DEFAULT_MATCH_PREFERENCES } from "../src/types.js";
 
-function song(id: string, name: string, artistName: string, isrc?: string, albumName = "Album"): AppleSong {
+function song(
+  id: string,
+  name: string,
+  artistName: string,
+  isrc?: string,
+  albumName = "Album",
+  durationInMillis = 180_000
+): AppleSong {
   return {
     id,
     type: "songs",
@@ -29,7 +36,7 @@ function song(id: string, name: string, artistName: string, isrc?: string, album
       name,
       artistName,
       albumName,
-      durationInMillis: 180_000,
+      durationInMillis,
       isrc
     }
   };
@@ -689,9 +696,11 @@ test("native-store matching bridges only the automatically selected candidate", 
       if (term.startsWith("ゆめ")) {
         return [song("native-winner", "ゆめ", "Artist", "WINNER"), song("native-wrong", "Different", "Other", "WRONG")];
       }
+      // Durations far enough apart that these stay rival recordings rather than duplicate
+      // releases of one recording, so the track keeps needing review.
       return [
         song("ambiguous-a", "なみ", "Artist", "AMBIGUOUS-A", "Album A"),
-        song("ambiguous-b", "なみ", "Artist", "AMBIGUOUS-B", "Album B")
+        song("ambiguous-b", "なみ", "Artist", "AMBIGUOUS-B", "Album B", 176_000)
       ];
     },
     songsByIsrc: async (isrc) => {
