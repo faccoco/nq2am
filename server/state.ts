@@ -265,8 +265,8 @@ export function getMatchReport(key: string): AppleMatchReport | undefined {
  * Manually set a track's Apple Music selection in a task's match report.
  *
  * Pass a candidate id to mark the track matched to that version, or `null` to
- * clear the selection and mark it as not found ("no match") — for when none of
- * the candidates is correct. Returns the updated result, or undefined if the
+ * clear the selection and reject all retrieved candidates ("no match"). A row
+ * with no retrieved candidates remains not found. Returns the updated result, or undefined if the
  * task/track/candidate is absent.
  */
 export function setTrackSelection(key: string, idx: number, appleMusicId: string | null) {
@@ -278,10 +278,9 @@ export function setTrackSelection(key: string, idx: number, appleMusicId: string
     // User declared there's no correct match.
     result.selectedId = undefined;
     result.selectionSource = "manual";
-    result.status = "not_found";
+    result.status = result.candidates?.length ? "score_rejected" : "not_found";
     result.appleMusicId = undefined;
     result.appleMusicUrl = undefined;
-    delete result.sameTrack;
     result.reason = "Marked as no match";
     delete result.requestFailure;
     task.updatedAt = Date.now();
@@ -297,11 +296,6 @@ export function setTrackSelection(key: string, idx: number, appleMusicId: string
   result.status = "matched";
   result.appleMusicId = candidate.id;
   result.appleMusicUrl = candidate.url;
-  if (candidate.titleDistance === 0 && candidate.albumDistance !== undefined && candidate.albumDistance !== 0) {
-    result.sameTrack = true;
-  } else {
-    delete result.sameTrack;
-  }
   result.reason = undefined;
   delete result.requestFailure;
   task.updatedAt = Date.now();

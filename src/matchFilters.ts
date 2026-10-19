@@ -1,10 +1,10 @@
 type MatchFilterResult = {
-  status: "not_implemented" | "matched" | "not_found" | "ambiguous" | "request_failed";
+  status: "not_implemented" | "matched" | "not_found" | "score_rejected" | "ambiguous" | "request_failed";
   candidates?: readonly unknown[];
 };
 
-export type MatchRetryScope = "not_found" | "ambiguous" | "request_failed" | "selected" | "all";
-export type MatchReviewTab = "all" | "ambiguous" | "not_found" | "request_failed" | "matched";
+export type MatchRetryScope = "not_found" | "score_rejected" | "ambiguous" | "request_failed" | "selected" | "all";
+export type MatchReviewTab = "all" | "ambiguous" | "score_rejected" | "not_found" | "request_failed" | "matched";
 
 export function getAmbiguousIndices(results: readonly MatchFilterResult[]): number[] {
   return results
@@ -17,6 +17,13 @@ export function getNotFoundIndices(results: readonly MatchFilterResult[]): numbe
   return results
     .map((r, i) => ({ r, i }))
     .filter(({ r }) => r.status === "not_found")
+    .map(({ i }) => i);
+}
+
+export function getScoreRejectedIndices(results: readonly MatchFilterResult[]): number[] {
+  return results
+    .map((r, i) => ({ r, i }))
+    .filter(({ r }) => r.status === "score_rejected")
     .map(({ i }) => i);
 }
 
@@ -41,6 +48,9 @@ export function getRetryIndices(
   if (scope === "request_failed") {
     return getRequestFailedIndices(results);
   }
+  if (scope === "score_rejected") {
+    return getScoreRejectedIndices(results);
+  }
   if (scope === "selected") {
     const seen = new Set<number>();
     return selectedIndices.filter((idx) => {
@@ -54,7 +64,7 @@ export function getRetryIndices(
 }
 
 export function retryScopeForTab(tab: MatchReviewTab, currentScope: MatchRetryScope): MatchRetryScope {
-  if (tab === "ambiguous" || tab === "not_found" || tab === "request_failed") {
+  if (tab === "ambiguous" || tab === "score_rejected" || tab === "not_found" || tab === "request_failed") {
     return tab;
   }
   return currentScope;

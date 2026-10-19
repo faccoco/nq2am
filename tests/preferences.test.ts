@@ -40,35 +40,48 @@ async function invokePutPreferences(body: unknown) {
   return { statusCode, jsonBody };
 }
 
-test("legacy scoring preferences are discarded while request settings receive defaults", async () => {
+test("legacy preferences reset score controls and preserve Apple request defaults", async () => {
   const { setPreferences } = await import("../server/preferences.js");
-  const prefs = await setPreferences({
-    threshold: 0.8,
-    ambiguousGap: 0.1,
-    preferDurationMatch: false,
-    explicitPreference: "clean",
-    preferOriginalVersion: false
-  });
+  const prefs = await setPreferences({ threshold: 0.8, matchConcurrency: 5, storefront: "JP" });
 
-  assert.equal("threshold" in prefs, false);
-  assert.equal("ambiguousGap" in prefs, false);
-  assert.equal("preferDurationMatch" in prefs, false);
-  assert.equal("explicitPreference" in prefs, false);
-  assert.equal("preferOriginalVersion" in prefs, false);
-  assert.equal(prefs.matchConcurrency, DEFAULT_MATCH_PREFERENCES.matchConcurrency);
+  assert.equal(prefs.scoringVersion, 3);
+  assert.equal(prefs.threshold, DEFAULT_MATCH_PREFERENCES.threshold);
+  assert.equal(prefs.reviewThreshold, DEFAULT_MATCH_PREFERENCES.reviewThreshold);
+  assert.equal(prefs.ambiguousGap, DEFAULT_MATCH_PREFERENCES.ambiguousGap);
+  assert.equal(prefs.matchConcurrency, 5);
+  assert.equal(prefs.storefront, "jp");
   assert.equal(prefs.appleRequestIntervalMs, DEFAULT_MATCH_PREFERENCES.appleRequestIntervalMs);
   assert.equal(prefs.appleRequestTimeoutMs, DEFAULT_MATCH_PREFERENCES.appleRequestTimeoutMs);
   assert.equal(prefs.appleRandomPauseEnabled, true);
+  assert.equal(prefs.artworkTimeoutMs, DEFAULT_MATCH_PREFERENCES.artworkTimeoutMs);
 });
 
-test("legacy request-attempt settings migrate to three automatic retries", async () => {
+test("v2 preferences migrate to locked v3 decision constants", async () => {
   const { setPreferences } = await import("../server/preferences.js");
   const prefs = await setPreferences({
-    ...DEFAULT_MATCH_PREFERENCES,
-    appleMaxAttempts: 1
+    scoringVersion: 2,
+    threshold: 0.9,
+    reviewThreshold: 0.5,
+    ambiguousGap: 0.2,
+    matchConcurrency: 4,
+    storefront: "jp"
   });
+  assert.equal(prefs.scoringVersion, 3);
+  assert.equal(prefs.threshold, DEFAULT_MATCH_PREFERENCES.threshold);
+  assert.equal(prefs.reviewThreshold, DEFAULT_MATCH_PREFERENCES.reviewThreshold);
+  assert.equal(prefs.ambiguousGap, DEFAULT_MATCH_PREFERENCES.ambiguousGap);
+  assert.equal(prefs.matchConcurrency, 4);
+  assert.equal(prefs.storefront, "jp");
+});
 
-  assert.equal(prefs.appleMaxAttempts, 4);
+test("unsupported scoring versions are rejected without modifying storage", async () => {
+  const { getPreferences, PreferencesValidationError, setPreferences } = await import("../server/preferences.js");
+  const current = await setPreferences({ ...DEFAULT_MATCH_PREFERENCES, threshold: 0.9 });
+  const storedBefore = readFileSync(join(dataDir, "preferences.json"), "utf8");
+
+  await assert.rejects(setPreferences({ ...current, scoringVersion: 99 }), PreferencesValidationError);
+  assert.deepEqual(await getPreferences(), current);
+  assert.equal(readFileSync(join(dataDir, "preferences.json"), "utf8"), storedBefore);
 });
 
 test("an explicitly disabled random pause remains disabled", async () => {

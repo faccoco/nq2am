@@ -15,6 +15,7 @@
   "status": {
     "matched": "已匹配",
     "not_found": "未找到",
+    "score_rejected": "评分未通过",
     "ambiguous": "存在歧义",
     "request_failed": "请求失败",
     "not_implemented": "未实现"
@@ -23,6 +24,7 @@
     "total": "总计",
     "matched": "已匹配",
     "not_found": "未找到",
+    "score_rejected": "评分未通过",
     "ambiguous": "存在歧义",
     "request_failed": "请求失败",
     "pending": "待处理"
@@ -30,11 +32,13 @@
   "tabs": {
     "all": "全部（{{count}}）",
     "ambiguous": "存在歧义（{{count}}）",
+    "score_rejected": "评分未通过（{{count}}）",
     "request_failed": "请求失败（{{count}}）",
     "not_found": "未找到（{{count}}）",
     "matched": "已匹配（{{count}}）"
   },
   "emptyAmbiguous": "没有存在歧义的歌曲。",
+  "emptyScoreRejected": "没有低于复核阈值的候选歌曲。",
   "emptyRequestFailed": "没有请求失败的歌曲。",
   "emptyNotFound": "没有未找到的歌曲。",
   "reselect": "重新选择",
@@ -49,8 +53,8 @@
     "status": "状态",
     "appleIdReason": "Apple ID / 原因"
   },
-  "manual": "(手动)",
-  "sameTrack": "相同曲目",
+  "manual": "（手动）",
+  "nativeNotice": "在歌曲的母语区域找到。会正确加入，但你的资料库会按账号区域的语言显示。",
   "notFoundNoReason": "未找到 Apple Music 候选项。",
   "requestFailedNoReason": "Apple Music 请求在匹配完成前失败。",
   "retry": {
@@ -62,6 +66,7 @@
     "scopes": {
       "request_failed": "请求失败（{{count}}）",
       "not_found": "未找到（{{count}}）",
+      "score_rejected": "评分未通过（{{count}}）",
       "ambiguous": "存在歧义（{{count}}）",
       "selected": "已选择（{{count}}）",
       "all": "全部（{{count}}）"
@@ -103,8 +108,8 @@
     "choose": "选择",
     "exact": "完全一致",
     "open": "打开 ↗",
-    "titleDistance": "标题距离 {{distance}}",
-    "rank": "#{{rank}}",
+    "score": "评分 {{score}}",
+    "version": "版本：{{version}}",
     "explicit": "E"
   }
 }

@@ -27,17 +27,91 @@
   },
   "matching": {
     "title": "Matching",
-    "description": "Candidates are sorted by normalized title distance, then by album edit distance when titles tie. Only an exact title match is selected automatically; a different album is marked as the same track.",
+    "scoringVersion": "Scoring model v{{version}}",
+    "description": "nq2am retrieves candidates with a bounded query cascade, resolves duplicate releases into recordings, and auto-selects only decisive recording groups. Decision thresholds are locked to the current scoring model; plausible results go to Ambiguous, and retrieved candidates below the review threshold go to Score rejected.",
     "loading": "Loading matching preferences…",
+    "threshold": {
+      "label": "Automatic match threshold:",
+      "help": "Higher is safer but sends more plausible recordings to review.",
+      "tooltip": "A recording group must reach this confidence and beat the runner-up by the configured margin before nq2am selects it automatically."
+    },
+    "reviewThreshold": {
+      "label": "Review threshold:",
+      "help": "Lower-confidence retrieved candidates are kept in Score rejected.",
+      "tooltip": "The best recording group must reach this lower threshold to enter Ambiguous review. If candidates were retrieved but all groups remain below it, the result is Score rejected rather than Not found."
+    },
+    "ambiguityGap": {
+      "label": "Recording-group margin:",
+      "help": "Higher means close recording groups are reviewed instead of auto-picked.",
+      "tooltip": "After album and eligible artwork evidence are applied, the winning recording group must exceed the runner-up by at least this margin. Duplicate releases in one recording group do not create false ambiguity."
+    },
+    "explicit": {
+      "label": "Explicit / clean preference",
+      "options": {
+        "none": "No preference",
+        "explicit": "Prefer explicit",
+        "clean": "Prefer clean"
+      },
+      "help": "Only used as a tie-breaker for close candidates.",
+      "tooltip": "This does not filter search results. It only chooses between otherwise close explicit and clean versions before the match falls back to cover comparison or manual review."
+    },
     "storefront": {
       "label": "Storefront",
       "placeholder": "auto (from your account)",
-      "help": "Tracks containing Japanese kana automatically use Japan; other tracks use this value or the detected account region.",
-      "tooltip": "This is the Apple Music storefront used for ordinary searches, such as us, jp, or cn. A title or artist containing Hiragana, Katakana, or related Japanese characters automatically switches the search storefront to jp."
+      "help": "Leave blank unless your Apple Music account region is detected wrong.",
+      "tooltip": "This is the Apple Music account region used when creating the final playlist, such as us, jp, or cn. Native-region search can still search JP/KR/CN first, then resolve the chosen song back to this account region by ISRC."
+    },
+    "preferDuration": "Prefer candidates whose duration is closest to the source track",
+    "preferDurationTooltip": "Adds a small score bonus when the Apple Music duration is close to the source track. The bonus is strongest within about 2 seconds and fades out by about 30 seconds.",
+    "preferOriginal": "Prefer original studio versions over remaster / live / karaoke",
+    "preferOriginalTooltip": "Applies a small penalty to candidates whose title looks like remaster, live, karaoke, instrumental, cover, version, or remix, unless the source title also asks for that version.",
+    "nativeSearch": "Search non-English tracks in their native region",
+    "nativeSearchTooltip": "For Japanese, Korean, and Chinese metadata, nq2am may search the matching Apple Music region first because local titles and covers are often more accurate there. If the chosen song has an ISRC, it then finds the same song in your account region for playlist creation.",
+    "nativeSearchHelp": "Useful for JP/KR/CN songs whose account-region metadata is romanized, translated, or missing.",
+    "cjk": {
+      "label": "Region detection for CJK tracks",
+      "options": {
+        "source": "By source (NetEase/QQ → China)",
+        "text": "By text (kanji → Japan)"
+      },
+      "help": "Use text mode when many Japanese songs come from NetEase or QQ.",
+      "tooltip": "By source still searches Japan for Han-only titles from NetEase/QQ (for example 炎) instead of stopping at China. Kana stays Japan and Hangul stays Korea. By text treats Han-only titles as Japanese first."
+    },
+    "aliasCatalog": {
+      "title": "Artist alias catalog",
+      "description": "Downloads MusicBrainz (general artists), VocaDB (Vocaloid), UtaiteDB (utaite), and TouhouDB (Touhou) artist-name dumps and compiles a local alias index. Dumps download one at a time, each split into segments fetched in parallel because these hosts throttle per connection. Interrupted downloads resume from the last byte; unchanged completed dumps are skipped. Matching never downloads these dumps itself.",
+      "download": "Download alias catalog",
+      "redownload": "Download again",
+      "downloading": "Downloading…",
+      "downloadingSource": "Downloading {{source}}…",
+      "listing": "Looking up dumps…",
+      "compiling": "Compiling index…",
+      "cancel": "Cancel",
+      "idleNever": "No alias catalog downloaded yet. Bundled aliases still work.",
+      "idleReady": "{{count}} groups · {{sources}}",
+      "downloadedAt": "Download date: {{date}}",
+      "dumpDate": "Dump date: {{date}}",
+      "failed": "Download failed. The previous index is still in use.",
+      "cancelled": "Download cancelled.",
+      "progressPercent": "{{percent}}%",
+      "progressSize": "{{received}} / {{total}}",
+      "progressSpeed": "{{speed}}/s",
+      "progressEta": "{{eta}} left",
+      "etaHoursMinutes": "{{hours}}h {{minutes}}m",
+      "etaHours": "{{hours}}h",
+      "etaMinutes": "{{minutes}}m",
+      "etaSeconds": "{{seconds}}s",
+      "sources": {
+        "musicbrainz": "MusicBrainz",
+        "vocadb": "VocaDB",
+        "utaitedb": "UtaiteDB",
+        "touhoudb": "TouhouDB"
+      },
+      "tooltip": "Use this when Japanese romanizations or Chinese script variants are missing. VocaDB covers Vocaloid names, UtaiteDB covers utaite, TouhouDB covers Touhou, and MusicBrainz covers everyone else. Search hints and legal names are not imported. A matching job already in progress keeps the index it started with."
     },
     "performance": {
       "title": "Performance and request pacing",
-      "description": "These values apply to new matches, retries, cross-region song resolution, and playlist creation. The first 429 in a consecutive streak triggers a global five-second pause; failed catalog requests are retried three times before a request failure is reported.",
+      "description": "These values apply to new matches, retries, cross-region song resolution, and playlist creation.",
       "concurrency": {
         "label": "Parallel tracks",
         "help": "Range: 1–10.",
@@ -51,12 +125,22 @@
       "requestTimeout": {
         "label": "Apple request timeout",
         "help": "Applied separately to each request attempt.",
-        "tooltip": "A catalog request that takes longer than this is retried three times. A request failure is reported only after all four attempts fail."
+        "tooltip": "A catalog request that takes longer than this is treated as a transient failure and may be retried according to the attempt limit."
+      },
+      "maxAttempts": {
+        "label": "Maximum attempts",
+        "help": "Includes the first request.",
+        "tooltip": "Total attempts allowed for rate limits, temporary server errors, and network timeouts. For example, 3 means one initial request plus at most two retries."
       },
       "retryDelay": {
         "label": "Initial retry delay",
         "help": "Doubles after each failed attempt.",
         "tooltip": "Base delay for exponential retry backoff. An Apple Retry-After response takes precedence when present."
+      },
+      "artworkTimeout": {
+        "label": "Artwork timeout",
+        "help": "Applied to download and decode separately.",
+        "tooltip": "Maximum time spent downloading or decoding one cover before cover comparison skips it. This does not change metadata scoring."
       },
       "randomPause": {
         "label": "Random request pauses",

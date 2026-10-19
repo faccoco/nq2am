@@ -1,5 +1,6 @@
 import type {
   AppleMatchResult,
+  ArtistAliasCatalogStatus,
   AuthStatus,
   MatchJob,
   MatchPreferences,
@@ -188,6 +189,22 @@ export const api = {
     return request<MatchPreferences>("/api/preferences", {
       method: "PUT",
       body: JSON.stringify(prefs),
+    });
+  },
+
+  async getArtistAliasCatalog(): Promise<ArtistAliasCatalogStatus> {
+    return request<ArtistAliasCatalogStatus>("/api/artist-alias-catalog");
+  },
+
+  async downloadArtistAliasCatalog(): Promise<ArtistAliasCatalogStatus> {
+    return request<ArtistAliasCatalogStatus>("/api/artist-alias-catalog/download", {
+      method: "POST",
+    });
+  },
+
+  async cancelArtistAliasCatalogDownload(): Promise<ArtistAliasCatalogStatus> {
+    return request<ArtistAliasCatalogStatus>("/api/artist-alias-catalog/cancel", {
+      method: "POST",
     });
   },
 

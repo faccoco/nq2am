@@ -4,7 +4,6 @@ import type { AppleCandidate } from "../types";
 
 type Props = {
   candidate: AppleCandidate;
-  rank: number;
   sourceDurationMs?: number;
   selected: boolean;
   onChoose: () => void;
@@ -13,7 +12,6 @@ type Props = {
 
 export default function CandidateCard({
   candidate,
-  rank,
   sourceDurationMs,
   selected,
   onChoose,
@@ -22,6 +20,11 @@ export default function CandidateCard({
   const { t } = useTranslation("match");
   const delta = fmtDelta(candidate.durationMs, sourceDurationMs);
   const exact = delta === "exact";
+  const versionLabel = (candidate.evidence?.parsedCandidate.versionDescriptors ?? [])
+    .filter((descriptor) => descriptor.identityRelevant !== false && descriptor.category !== "recording")
+    .map((descriptor) => descriptor.raw)
+    .filter(Boolean)
+    .join(" · ");
 
   return (
     <div
@@ -43,9 +46,6 @@ export default function CandidateCard({
 
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
-          <span className="flex-shrink-0 rounded bg-slate-700 px-1.5 py-0.5 text-[10px] font-semibold text-slate-300">
-            {t("candidate.rank", { rank })}
-          </span>
           <span className="truncate text-sm font-medium text-slate-100">
             {candidate.name}
           </span>
@@ -71,8 +71,9 @@ export default function CandidateCard({
               ({exact ? t("candidate.exact") : delta})
             </span>
           )}
-          {Number.isFinite(candidate.titleDistance) && (
-            <span>· {t("candidate.titleDistance", { distance: candidate.titleDistance })}</span>
+          <span>· {t("candidate.score", { score: candidate.score.toFixed(2) })}</span>
+          {versionLabel && (
+            <span className="truncate text-slate-400">{t("candidate.version", { version: versionLabel })}</span>
           )}
           {candidate.url && (
             <a

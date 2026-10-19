@@ -1,5 +1,5 @@
 type CollapsibleReviewResult = {
-  status: "not_implemented" | "matched" | "not_found" | "ambiguous" | "request_failed";
+  status: "not_implemented" | "matched" | "not_found" | "score_rejected" | "ambiguous" | "request_failed";
   selectionSource?: "auto" | "manual";
   candidates?: readonly unknown[];
 };
@@ -31,5 +31,9 @@ export function areReviewOptionsCollapsed(
 }
 
 function shouldAutoCollapseReviewOptions(result: CollapsibleReviewResult): boolean {
-  return result.status === "not_found" && result.selectionSource === "manual" && (result.candidates?.length ?? 0) > 0;
+  return (
+    (result.status === "not_found" || result.status === "score_rejected") &&
+    result.selectionSource === "manual" &&
+    (result.candidates?.length ?? 0) > 0
+  );
 }

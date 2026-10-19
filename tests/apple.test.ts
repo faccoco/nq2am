@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import type { AppleSong } from "../src/apple/api.js";
-import type { AppleContentRating, NormalizedPlaylist, NormalizedTrack } from "../src/types.js";
+import type { AppleContentRating, MatchPreferences, NormalizedPlaylist, NormalizedTrack } from "../src/types.js";
 import { DEFAULT_MATCH_PREFERENCES } from "../src/types.js";
 
 process.env.NQ2AM_DATA_DIR = mkdtempSync(join(tmpdir(), "nq2am-test-"));
@@ -15,6 +15,10 @@ function loadAppModule(): Promise<typeof import("../src/index.js")> {
   return appModule;
 }
 
+function track(originalName: string, provider: NormalizedTrack["source"]["provider"] = "netease"): NormalizedTrack {
+  return { originalName, artists: [], source: { provider, raw: {} } };
+}
+
 let matcherModule: Promise<typeof import("../src/apple/matcher.js")> | undefined;
 function loadMatcherModule(): Promise<typeof import("../src/apple/matcher.js")> {
   matcherModule ??= import("../src/apple/matcher.js");
@@ -23,6 +27,11 @@ function loadMatcherModule(): Promise<typeof import("../src/apple/matcher.js")> 
 
 function cover(fill: string): string {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" fill="${fill}"/></svg>`;
+  return `data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`;
+}
+
+function splitCover(left: string, right: string): string {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="32" height="64" fill="${left}"/><rect x="32" width="32" height="64" fill="${right}"/></svg>`;
   return `data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`;
 }
 
@@ -71,6 +80,31 @@ function appleSongWith(
   };
 }
 
+function tiePrefs(): MatchPreferences {
+  return {
+    ...DEFAULT_MATCH_PREFERENCES,
+    threshold: 0.7,
+    ambiguousGap: 0.1,
+    preferDurationMatch: false,
+    explicitPreference: "none"
+  };
+}
+
+test("detectStorefrontForTrack picks native region by script", async () => {
+  const { detectStorefrontForTrack } = await loadAppModule();
+  // Kana → jp
+  assert.equal(detectStorefrontForTrack(track("名前のない怪物 EGOIST"), "source"), "jp");
+  assert.equal(detectStorefrontForTrack(track("ゆめ"), "source"), "jp");
+  // Hangul → kr
+  assert.equal(detectStorefrontForTrack(track("봄날"), "source"), "kr");
+  // Han-only, Chinese provider, source mode → cn
+  assert.equal(detectStorefrontForTrack(track("七里香", "qq"), "source"), "cn");
+  // Han-only, text mode → jp (kanji titles assumed Japanese)
+  assert.equal(detectStorefrontForTrack(track("時計", "qq"), "text"), "jp");
+  // Latin → undefined (use account store)
+  assert.equal(detectStorefrontForTrack(track("Bohemian Rhapsody"), "source"), undefined);
+});
+
 test("Apple Music matcher returns explicit not implemented results", async () => {
   const { matchAppleMusic } = await loadAppModule();
   const playlist: NormalizedPlaylist = {
@@ -100,137 +134,36 @@ test("Apple Music matcher returns explicit not implemented results", async () =>
   assert.equal(report.results[0].status, "not_implemented");
 });
 
-test("Apple Music matcher searches by song name and artists", async () => {
-  const { matchAppleMusic } = await loadAppModule();
-  let searchedTerm: string | undefined;
-  let searchedStorefront: string | undefined;
-  const playlist: NormalizedPlaylist = {
-    provider: "qq",
-    id: "search-term",
-    name: "Search term",
-    tracks: [
-      {
-        originalName: " Song (Live) [Remaster] ",
-        artists: ["Primary Artist", " Featured Artist "],
-        source: { provider: "qq", playlistId: "search-term", songId: "song", raw: {} }
-      }
-    ],
-    raw: {}
-  };
-
-  await matchAppleMusic(playlist, { ...DEFAULT_MATCH_PREFERENCES, storefront: "jp" }, undefined, {
-    logger: () => {},
-    sessionFactory: async () => ({
-      search: async (term, storefront) => {
-        searchedTerm = term;
-        searchedStorefront = storefront;
-        return [];
-      },
-      getStorefront: async () => "us",
-      createPlaylist: async () => "playlist",
-      getStats: () => ({ requestCount: 1, retryCount: 0 }),
-      close: async () => {}
-    })
-  });
-
-  assert.equal(searchedTerm, "Song Primary Artist Featured Artist");
-  assert.equal(searchedStorefront, "jp");
-});
-
-test("Apple Music matcher switches Japanese-character searches to the Japan storefront", async () => {
-  const { containsJapaneseCharacters, matchAppleMusic } = await loadMatcherModule();
-  const searches: Array<{ term: string; storefront: string }> = [];
-  const playlist: NormalizedPlaylist = {
-    provider: "netease",
-    id: "japanese-storefront",
-    tracks: [
-      {
-        originalName: "ASCII Song",
-        artists: ["ASCII Artist"],
-        source: { provider: "netease", raw: {} }
-      },
-      {
-        originalName: "名前のない怪物",
-        artists: ["EGOIST"],
-        source: { provider: "netease", raw: {} }
-      }
-    ],
-    raw: {}
-  };
-
-  await matchAppleMusic(playlist, { ...DEFAULT_MATCH_PREFERENCES, storefront: "us", matchConcurrency: 1 }, undefined, {
-    logger: () => {},
-    sessionFactory: async () => ({
-      search: async (term, storefront) => {
-        searches.push({ term, storefront });
-        return [];
-      },
-      getStorefront: async () => "us",
-      createPlaylist: async () => "playlist",
-      getStats: () => ({ requestCount: searches.length, retryCount: 0 }),
-      close: async () => {}
-    })
-  });
-
-  assert.equal(containsJapaneseCharacters("ASCII Song"), false);
-  assert.equal(containsJapaneseCharacters("名前のない怪物"), true);
-  assert.deepEqual(searches, [
-    { term: "ASCII Song ASCII Artist", storefront: "us" },
-    { term: "名前のない怪物 EGOIST", storefront: "jp" }
-  ]);
-});
-
-test("Apple Music matcher normalizes title strings before measuring distance", async () => {
+test("Apple Music matcher normalizes exact metadata score and records breakdown", async () => {
   const { matchSingleTrack } = await loadMatcherModule();
   const result = await matchSingleTrack(
     {
-      originalName: " ＳＯＮＧ’S ",
-      artists: ["Unrelated source artist"],
+      originalName: "Song",
+      artists: ["Artist"],
+      albumName: "Album",
+      durationMs: 180_000,
       source: { provider: "qq", raw: {} }
     },
-    [
-      appleSongWith("farther", { name: "songs!", artistName: "Source artist" }),
-      appleSongWith("normalized", { name: "songS", artistName: "Different artist" })
-    ],
-    "us"
+    [appleSong("exact")],
+    "us",
+    DEFAULT_MATCH_PREFERENCES
   );
 
   assert.equal(result.status, "matched");
-  assert.equal(result.selectedId, "normalized");
-  assert.deepEqual(
-    result.candidates?.map((candidate) => [candidate.id, candidate.titleDistance]),
-    [
-      ["normalized", 0],
-      ["farther", 1]
-    ]
-  );
+  const best = result.candidates?.[0];
+  assert.ok(best);
+  assert.ok(best.score >= 0.99);
+  assert.ok(best.score <= 1);
+  const breakdown = best.scoreBreakdown;
+  assert.ok(breakdown);
+  assert.equal(breakdown.total, best.score);
+  assert.equal(breakdown.fields.title, 1);
+  assert.equal(breakdown.fields.artist, 1);
+  assert.equal(breakdown.fields.album, 1);
+  assert.equal(breakdown.fields.duration, 1);
 });
 
-test("Apple Music matcher moves source and Apple feat annotations into deduplicated artists", async () => {
-  const { matchSingleTrack } = await loadMatcherModule();
-  const result = await matchSingleTrack(
-    {
-      originalName: "Song (feat. Guest)",
-      artists: ["Primary", "Guest"],
-      source: { provider: "qq", raw: {} }
-    },
-    [
-      appleSongWith("apple-song", {
-        name: "Song [feat. Guest]",
-        artistName: "Primary"
-      })
-    ],
-    "us"
-  );
-
-  assert.equal(result.track.originalName, "Song");
-  assert.deepEqual(result.track.artists, ["Primary", "Guest"]);
-  assert.equal(result.candidates?.[0]?.name, "Song");
-  assert.equal(result.candidates?.[0]?.artistName, "Primary, Guest");
-  assert.equal(result.candidates?.[0]?.titleDistance, 0);
-});
-
-test("Apple Music matcher sorts candidates by title Levenshtein distance", async () => {
+test("Apple Music matcher scores source-album candidates above same-title wrong albums", async () => {
   const { matchSingleTrack } = await loadMatcherModule();
   const result = await matchSingleTrack(
     {
@@ -241,116 +174,375 @@ test("Apple Music matcher sorts candidates by title Levenshtein distance", async
       source: { provider: "qq", raw: {} }
     },
     [
-      appleSongWith("far", { name: "A Completely Different Song" }),
-      appleSongWith("near", { name: "Songs" }),
-      appleSongWith("exact", { name: "Song", albumName: "Source Album" })
+      appleSongWith("wrong-album", { albumName: "Other Album" }),
+      appleSongWith("source-album", { albumName: "Source Album" })
     ],
-    "us"
+    "us",
+    DEFAULT_MATCH_PREFERENCES
   );
 
   assert.equal(result.status, "matched");
-  assert.equal(result.selectedId, "exact");
-  assert.equal(result.sameTrack, undefined);
-  assert.equal(result.candidates?.[0]?.albumDistance, 0);
-  assert.deepEqual(
-    result.candidates?.map((candidate) => [candidate.id, candidate.titleDistance]),
-    [
-      ["exact", 0],
-      ["near", 1],
-      ["far", 23]
-    ]
-  );
+  assert.equal(result.selectedId, "source-album");
+  const sourceAlbum = result.candidates?.find((c) => c.id === "source-album");
+  const wrongAlbum = result.candidates?.find((c) => c.id === "wrong-album");
+  assert.ok(sourceAlbum && wrongAlbum);
+  assert.ok(sourceAlbum.score > wrongAlbum.score);
 });
 
-test("Apple Music matcher removes trailing Single suffixes before comparing albums", async () => {
+test("Apple Music matcher keeps text identity stronger than duration", async () => {
   const { matchSingleTrack } = await loadMatcherModule();
   const result = await matchSingleTrack(
     {
       originalName: "Song",
       artists: ["Artist"],
-      albumName: "Album - Single",
-      source: { provider: "qq", raw: {} }
-    },
-    [appleSongWith("single", { name: "Song", albumName: "Album – Single" })],
-    "us"
-  );
-
-  assert.equal(result.status, "matched");
-  assert.equal(result.track.albumName, "Album");
-  assert.equal(result.candidates?.[0]?.albumName, "Album");
-  assert.equal(result.candidates?.[0]?.albumDistance, 0);
-  assert.equal(result.sameTrack, undefined);
-});
-
-test("Apple Music matcher marks every non-exact title as not found", async () => {
-  const { matchSingleTrack } = await loadMatcherModule();
-  const result = await matchSingleTrack(
-    {
-      originalName: "Song",
-      artists: ["Artist"],
-      source: { provider: "qq", raw: {} }
-    },
-    [appleSongWith("near", { name: "Songs" }), appleSongWith("far", { name: "Different" })],
-    "us"
-  );
-
-  assert.equal(result.status, "not_found");
-  assert.equal(result.selectedId, undefined);
-  assert.equal(result.appleMusicId, undefined);
-  assert.deepEqual(
-    result.candidates?.map((candidate) => [candidate.id, candidate.titleDistance]),
-    [
-      ["near", 1],
-      ["far", 8]
-    ]
-  );
-  assert.match(result.reason ?? "", /exact title match required/i);
-});
-
-test("Apple Music matcher uses album distance to break title-distance ties", async () => {
-  const { matchSingleTrack } = await loadMatcherModule();
-  const result = await matchSingleTrack(
-    {
-      originalName: "Song",
-      artists: ["Source Artist"],
-      albumName: "Source Album",
+      albumName: "Album",
       durationMs: 180_000,
       source: { provider: "qq", raw: {} }
     },
     [
-      appleSongWith("first", {
-        name: "Song",
-        artistName: "Wrong Artist",
-        albumName: "Wrong Album",
-        durationMs: 999_000
-      }),
-      appleSongWith("second", {
-        name: "Song",
-        artistName: "Source Artist",
-        albumName: "Source Album",
+      appleSongWith("right-text-wrong-duration", { durationMs: 260_000 }),
+      appleSongWith("wrong-text-right-duration", {
+        name: "Different Song",
+        artistName: "Other Artist",
         durationMs: 180_000
       })
     ],
-    "us"
+    "us",
+    { ...DEFAULT_MATCH_PREFERENCES, ambiguousGap: 0.01 }
   );
 
   assert.equal(result.status, "matched");
-  assert.equal(result.selectedId, "second");
-  assert.equal(result.sameTrack, undefined);
-  assert.deepEqual(
-    result.candidates?.map((candidate) => candidate.id),
-    ["second", "first"]
-  );
-  assert.deepEqual(
-    result.candidates?.map((candidate) => [candidate.titleDistance, candidate.albumDistance]),
-    [
-      [0, 0],
-      [0, 6]
-    ]
-  );
+  assert.equal(result.selectedId, "right-text-wrong-duration");
+  const winner = result.candidates?.[0];
+  assert.ok(winner);
+  assert.ok(winner.score <= 1);
+  const breakdown = winner.scoreBreakdown;
+  assert.ok(breakdown);
+  assert.equal(breakdown.fields.duration, 0);
 });
 
-test("Apple Music matcher prefers the smallest nonzero album distance for equal titles", async () => {
+test("Apple Music matcher rejects unwanted off-vocal versions below threshold", async () => {
+  const { matchSingleTrack } = await loadMatcherModule();
+  const result = await matchSingleTrack(
+    {
+      originalName: "Song",
+      artists: ["Artist"],
+      albumName: "Album",
+      durationMs: 180_000,
+      source: { provider: "qq", raw: {} }
+    },
+    [appleSongWith("off-vocal", { name: "Song (Off Vocal)" })],
+    "us",
+    { ...DEFAULT_MATCH_PREFERENCES, threshold: 0.8 }
+  );
+
+  assert.equal(result.status, "score_rejected");
+  assert.match(result.reason ?? "", /below review threshold/);
+});
+
+test("Apple Music matcher allows requested off-vocal versions", async () => {
+  const { matchSingleTrack } = await loadMatcherModule();
+  const result = await matchSingleTrack(
+    {
+      originalName: "Song (Off Vocal)",
+      artists: ["Artist"],
+      albumName: "Album",
+      durationMs: 180_000,
+      source: { provider: "qq", raw: {} }
+    },
+    [appleSongWith("plain", { name: "Song" }), appleSongWith("off-vocal", { name: "Song (Off Vocal)" })],
+    "us",
+    DEFAULT_MATCH_PREFERENCES
+  );
+
+  assert.equal(result.status, "matched");
+  assert.equal(result.selectedId, "off-vocal");
+});
+
+test("Apple Music matcher treats feat annotations as credits, not title or album mismatches", async () => {
+  const { matchSingleTrack } = await loadMatcherModule();
+  const result = await matchSingleTrack(
+    {
+      originalName: "初音ミクの消失",
+      artists: ["cosMo@暴走P", "初音ミク"],
+      albumName: "初音ミクの消失",
+      durationMs: 292_000,
+      source: { provider: "netease", raw: {} }
+    },
+    [
+      appleSongWith("download", {
+        name: "初音ミクの消失",
+        artistName: "cosMo@暴走P feat.石川綾子",
+        albumName: "Download (feat.初音ミク)",
+        durationMs: 289_000
+      }),
+      appleSongWith("single", {
+        name: "初音ミクの消失 (feat. 初音ミク)",
+        artistName: "cosMo@暴走P",
+        albumName: "初音ミクの消失 (feat. 初音ミク)",
+        durationMs: 292_000
+      })
+    ],
+    "jp",
+    { ...DEFAULT_MATCH_PREFERENCES, threshold: 0.8 }
+  );
+
+  assert.equal(result.status, "matched");
+  assert.equal(result.selectedId, "single");
+  assert.ok((result.candidates?.find((c) => c.id === "single")?.score ?? 0) >= 0.9);
+});
+
+test("Apple Music matcher treats remaster annotations as version metadata", async () => {
+  const { matchSingleTrack } = await loadMatcherModule();
+  const result = await matchSingleTrack(
+    {
+      originalName: "fragments (2015 rework)",
+      artists: ["kamome sano"],
+      albumName: "archive001:reworks+",
+      durationMs: 290_000,
+      source: { provider: "netease", raw: {} }
+    },
+    [
+      appleSongWith("remaster", {
+        name: "Fragments (2015 Rework) [2022 Remaster]",
+        artistName: "Kamome Sano",
+        albumName: "Archive001:Reworks+ (2022 Remaster)",
+        durationMs: 290_000
+      })
+    ],
+    "tr",
+    { ...DEFAULT_MATCH_PREFERENCES, threshold: 0.8 }
+  );
+
+  assert.equal(result.status, "matched");
+  assert.equal(result.selectedId, "remaster");
+  assert.ok((result.candidates?.[0]?.score ?? 0) >= 0.9);
+});
+
+test("Apple Music matcher treats missing extended-version suffixes as compatible when duration agrees", async () => {
+  const { matchSingleTrack } = await loadMatcherModule();
+  const result = await matchSingleTrack(
+    {
+      originalName: "World Vanquisher",
+      artists: ["void"],
+      albumName: "Perfect Solitude",
+      durationMs: 355_000,
+      source: { provider: "netease", raw: {} }
+    },
+    [
+      appleSongWith("short-single", {
+        name: "World Vanquisher",
+        artistName: "void(Mournfinale)",
+        albumName: "Liberate the Metaverse",
+        durationMs: 164_000
+      }),
+      appleSongWith("short-compilation", {
+        name: "World Vanquisher",
+        artistName: "void(Mournfinale)",
+        albumName: "Chunithm All Justice Collection Episode II 1",
+        durationMs: 164_000
+      }),
+      appleSongWith("album-extended", {
+        name: "World Vanquisher (Album Extended)",
+        artistName: "void(Mournfinale)",
+        albumName: "Chunithm All Justice Collection Episode II 2",
+        durationMs: 357_000
+      })
+    ],
+    "tr",
+    { ...DEFAULT_MATCH_PREFERENCES, threshold: 0.85 }
+  );
+
+  assert.equal(result.status, "matched");
+  assert.equal(result.selectedId, "album-extended");
+  assert.ok((result.candidates?.[0]?.scoreBreakdown?.fields.title ?? 0) >= 0.95);
+});
+
+test("Apple Music matcher treats Apple single album suffixes as the source album", async () => {
+  const { matchSingleTrack } = await loadMatcherModule();
+  const result = await matchSingleTrack(
+    {
+      originalName: "最強STRONGER",
+      artists: ["REDALiCE", "USAO"],
+      albumName: "最強STRONGER",
+      durationMs: 142_000,
+      source: { provider: "netease", raw: {} }
+    },
+    [
+      appleSongWith("single", {
+        name: "最強STRONGER",
+        artistName: "REDALiCE & USAO",
+        albumName: "最強STRONGER - Single",
+        durationMs: 142_000
+      }),
+      appleSongWith("compilation", {
+        name: "最強STRONGER",
+        artistName: "REDALiCE & USAO",
+        albumName: "Arcaea Sound Collection: Memories of Wrath",
+        durationMs: 143_000
+      })
+    ],
+    "cn",
+    DEFAULT_MATCH_PREFERENCES
+  );
+
+  assert.equal(result.status, "matched");
+  assert.equal(result.selectedId, "single");
+  const winner = result.candidates?.find((candidate) => candidate.id === "single");
+  assert.ok(winner);
+  assert.equal(winner.scoreBreakdown?.fields.album, 1);
+});
+
+test("Apple Music matcher auto-selects indistinguishable duplicate candidates", async () => {
+  const { matchSingleTrack } = await loadMatcherModule();
+  const result = await matchSingleTrack(
+    {
+      originalName: "PUPA",
+      artists: ["モリモリあつし"],
+      albumName: "タイムカプセル",
+      durationMs: 128_000,
+      source: { provider: "netease", raw: {} }
+    },
+    [
+      appleSongWith("old-catalog", {
+        name: "PUPA",
+        artistName: "モリモリあつし",
+        albumName: "タイムカプセル",
+        durationMs: 128_000
+      }),
+      appleSongWith("new-catalog", {
+        name: "PUPA",
+        artistName: "モリモリあつし",
+        albumName: "タイムカプセル",
+        durationMs: 128_000
+      })
+    ],
+    "jp",
+    DEFAULT_MATCH_PREFERENCES
+  );
+
+  assert.equal(result.status, "matched");
+  assert.equal(result.selectedId, "new-catalog");
+  assert.match(result.reason ?? "", /duplicate/i);
+});
+
+test("Apple Music matcher auto-selects source-album duplicates with refreshed artwork URLs", async () => {
+  const { matchSingleTrack } = await loadMatcherModule();
+  const result = await matchSingleTrack(
+    {
+      originalName: "PUPA",
+      artists: ["モリモリあつし"],
+      albumName: "タイムカプセル",
+      durationMs: 128_000,
+      source: { provider: "netease", raw: {} }
+    },
+    [
+      appleSongWith("old-catalog", {
+        name: "PUPA",
+        artistName: "モリモリあつし",
+        albumName: "タイムカプセル",
+        durationMs: 128_000,
+        artworkUrl: cover("red")
+      }),
+      appleSongWith("new-catalog", {
+        name: "PUPA",
+        artistName: "モリモリあつし",
+        albumName: "タイムカプセル",
+        durationMs: 128_000,
+        artworkUrl: cover("blue")
+      })
+    ],
+    "jp",
+    DEFAULT_MATCH_PREFERENCES
+  );
+
+  assert.equal(result.status, "matched");
+  assert.equal(result.selectedId, "new-catalog");
+  assert.match(result.reason ?? "", /duplicate/i);
+});
+
+test("Apple Music matcher uses album similarity for near-tied candidates", async () => {
+  const { matchSingleTrack } = await loadMatcherModule();
+  const result = await matchSingleTrack(
+    {
+      originalName: "Song",
+      artists: ["Artist"],
+      albumName: "Source Album Original Soundtrack",
+      source: { provider: "qq", raw: {} }
+    },
+    [
+      appleSongWith("wrong-album", { albumName: "Different Compilation" }),
+      appleSongWith("album-similar", { albumName: "Source Album OST" })
+    ],
+    "us",
+    { ...tiePrefs(), ambiguousGap: 0.5 }
+  );
+
+  assert.equal(result.status, "matched");
+  assert.equal(result.selectedId, "album-similar");
+  assert.match(result.reason ?? "", /album/i);
+});
+
+test("Apple Music matcher uses album cover similarity for near-tied candidates", async () => {
+  const { matchSingleTrack } = await loadMatcherModule();
+  const result = await matchSingleTrack(
+    {
+      originalName: "Song",
+      artists: ["Artist"],
+      albumCoverUrl: cover("red"),
+      source: { provider: "qq", raw: {} }
+    },
+    [appleSong("blue", cover("blue")), appleSong("red", cover("red"))],
+    "us",
+    tiePrefs()
+  );
+
+  assert.equal(result.status, "matched");
+  assert.equal(result.selectedId, "red");
+  assert.match(result.reason ?? "", /album cover similarity/);
+});
+
+test("Apple Music matcher uses cover structure when average colors are misleading", async () => {
+  const { matchSingleTrack } = await loadMatcherModule();
+  const result = await matchSingleTrack(
+    {
+      originalName: "Song",
+      artists: ["Artist"],
+      albumCoverUrl: splitCover("black", "white"),
+      source: { provider: "qq", raw: {} }
+    },
+    [
+      appleSong("same-first-color", splitCover("black", "black")),
+      appleSong("same-structure", splitCover("black", "white"))
+    ],
+    "us",
+    tiePrefs()
+  );
+
+  assert.equal(result.status, "matched");
+  assert.equal(result.selectedId, "same-structure");
+  assert.match(result.reason ?? "", /album cover similarity/);
+});
+
+test("Apple Music matcher groups duplicate releases when cover similarity is weak", async () => {
+  const { matchSingleTrack } = await loadMatcherModule();
+  const result = await matchSingleTrack(
+    {
+      originalName: "Song",
+      artists: ["Artist"],
+      albumCoverUrl: cover("red"),
+      source: { provider: "qq", raw: {} }
+    },
+    [appleSong("red", cover("red")), appleSong("almost-red", cover("#f00000"))],
+    "us",
+    tiePrefs()
+  );
+
+  assert.equal(result.status, "matched");
+  assert.equal(result.recordingGroups?.length, 1);
+});
+
+test("Apple Music matcher uses exact album match for near-tied candidates", async () => {
   const { matchSingleTrack } = await loadMatcherModule();
   const result = await matchSingleTrack(
     {
@@ -360,79 +552,19 @@ test("Apple Music matcher prefers the smallest nonzero album distance for equal 
       source: { provider: "qq", raw: {} }
     },
     [
-      appleSongWith("far", { name: "Song", albumName: "Wrong Album" }),
-      appleSongWith("near", { name: "Song", albumName: "Source Albums" })
+      appleSong("wrong-album", undefined, undefined, "Other Album"),
+      appleSong("source-album", undefined, undefined, "Source Album")
     ],
-    "us"
+    "us",
+    tiePrefs()
   );
 
   assert.equal(result.status, "matched");
-  assert.equal(result.selectedId, "near");
-  assert.equal(result.sameTrack, true);
-  assert.deepEqual(
-    result.candidates?.map((candidate) => [candidate.id, candidate.albumDistance]),
-    [
-      ["near", 1],
-      ["far", 6]
-    ]
-  );
+  assert.equal(result.selectedId, "source-album");
+  assert.match(result.reason ?? "", /album match/);
 });
 
-test("Apple Music matcher removes round and square bracket annotations from title comparison", async () => {
-  const { matchSingleTrack } = await loadMatcherModule();
-  const result = await matchSingleTrack(
-    {
-      originalName: "Song (Off Vocal) ［Source Note］",
-      artists: ["Artist"],
-      source: { provider: "qq", raw: {} }
-    },
-    [appleSongWith("plain", { name: "Song" }), appleSongWith("annotated", { name: "Song （Live）[Remaster]" })],
-    "us"
-  );
-
-  assert.equal(result.status, "matched");
-  assert.equal(result.track.originalName, "Song");
-  assert.equal(result.selectedId, "plain");
-  assert.deepEqual(
-    result.candidates?.map((candidate) => [candidate.id, candidate.name, candidate.titleDistance]),
-    [
-      ["plain", "Song", 0],
-      ["annotated", "Song", 0]
-    ]
-  );
-});
-
-test("Apple Music matcher matches Love it after removing title annotations", async () => {
-  const { matchSingleTrack } = await loadMatcherModule();
-  const result = await matchSingleTrack(
-    {
-      originalName: "Love it! (New Original Version)",
-      artists: ["S.C.X", "初音ミク"],
-      albumName: "Sound Collection - New Original",
-      durationMs: 331_730,
-      source: { provider: "netease", raw: {} }
-    },
-    [
-      appleSongWith("956732093", {
-        name: "Love it! (New Original Version) [feat. Hatsune Miku]",
-        artistName: "Clean Tears",
-        albumName: "Sound Collection - New Original",
-        durationMs: 331_730
-      })
-    ],
-    "jp"
-  );
-
-  assert.equal(result.status, "matched");
-  assert.equal(result.track.originalName, "Love it!");
-  assert.equal(result.selectedId, "956732093");
-  assert.equal(result.candidates?.[0]?.name, "Love it!");
-  assert.equal(result.candidates?.[0]?.artistName, "Clean Tears, Hatsune Miku");
-  assert.equal(result.candidates?.[0]?.titleDistance, 0);
-  assert.equal(result.candidates?.[0]?.albumDistance, 0);
-});
-
-test("Apple Music matcher keeps Apple order when album distance is unavailable", async () => {
+test("Apple Music matcher groups duplicate releases when cover art is missing", async () => {
   const { matchSingleTrack } = await loadMatcherModule();
   const result = await matchSingleTrack(
     {
@@ -441,18 +573,42 @@ test("Apple Music matcher keeps Apple order when album distance is unavailable",
       source: { provider: "qq", raw: {} }
     },
     [appleSong("a", cover("blue")), appleSong("b", cover("red"))],
-    "us"
+    "us",
+    tiePrefs()
   );
 
   assert.equal(result.status, "matched");
-  assert.equal(result.selectedId, "a");
-  assert.deepEqual(
-    result.candidates?.map((candidate) => [candidate.id, candidate.albumDistance]),
-    [
-      ["a", undefined],
-      ["b", undefined]
-    ]
+  assert.equal(result.recordingGroups?.length, 1);
+});
+
+test("Apple Music matcher prefers the closest album across every candidate above threshold", async () => {
+  const { matchSingleTrack } = await loadMatcherModule();
+  const higherScores = Array.from({ length: 8 }, (_, index) => {
+    const candidate = appleSong(`higher-score-${index}`);
+    candidate.attributes.name = "Song Extended";
+    candidate.attributes.albumName = `Other Album ${index}`;
+    return candidate;
+  });
+  const closestAlbum = appleSong("closest-album");
+  closestAlbum.attributes.albumName = "Ｔａｒｇｅｔ Ａｌｂｕｍ - Single";
+
+  const result = await matchSingleTrack(
+    {
+      originalName: "Song Extended",
+      artists: ["Artist"],
+      albumName: "Target Album",
+      durationMs: 180_000,
+      source: { provider: "qq", raw: {} }
+    },
+    [...higherScores, closestAlbum],
+    "us",
+    tiePrefs()
   );
+
+  assert.equal(result.status, "matched");
+  assert.equal(result.selectedId, "closest-album");
+  assert.ok(result.candidates?.some((candidate) => candidate.id === "closest-album"));
+  assert.match(result.reason ?? "", /album similarity/);
 });
 
 test("Apple Music retry only replaces not-found results", async () => {
@@ -483,7 +639,7 @@ test("Apple Music retry only replaces not-found results", async () => {
         status: "matched",
         selectedId: "apple-ok",
         appleMusicId: "apple-ok",
-        candidates: [{ id: "apple-ok", name: "Matched", artistName: "Artist", titleDistance: 0 }]
+        candidates: [{ id: "apple-ok", name: "Matched", artistName: "Artist", score: 1 }]
       },
       {
         track: missingTrack,
@@ -495,7 +651,7 @@ test("Apple Music retry only replaces not-found results", async () => {
         track: manualNoMatchTrack,
         status: "not_found",
         selectionSource: "manual",
-        candidates: [{ id: "apple-no", name: "Manual no match", artistName: "Artist", titleDistance: 0 }],
+        candidates: [{ id: "apple-no", name: "Manual no match", artistName: "Artist", score: 0.9 }],
         reason: "Marked as no match"
       }
     ]
@@ -536,12 +692,12 @@ test("Apple Music retry can refresh selected result indices once", async () => {
           status: "matched",
           selectedId: "keep",
           appleMusicId: "keep",
-          candidates: [{ id: "keep", name: "Keep", artistName: "Artist", titleDistance: 0 }]
+          candidates: [{ id: "keep", name: "Keep", artistName: "Artist", score: 1 }]
         },
         {
           track: selectedTrack,
           status: "ambiguous",
-          candidates: [{ id: "selected", name: "Selected", artistName: "Artist", titleDistance: 0 }]
+          candidates: [{ id: "selected", name: "Selected", artistName: "Artist", score: 0.9 }]
         },
         {
           track: duplicateTrack,
@@ -583,26 +739,28 @@ test("Apple Music retry replaces request failures with fresh semantic results", 
       }))
     },
     [0, 1, 2, 3],
-    { ...DEFAULT_MATCH_PREFERENCES, storefront: "us", matchConcurrency: 1 },
+    { ...DEFAULT_MATCH_PREFERENCES, storefront: "us", nativeSearch: false, matchConcurrency: 1 },
     undefined,
     {
       logger: () => {},
       sessionFactory: async () => ({
         search: async (term) => {
-          if (term.startsWith("Matched")) {
+          const key = term.toLowerCase();
+          if (key.startsWith("matched")) {
             return [appleSongWith("matched", { name: "Matched", artistName: "Artist", durationMs: 180_000 })];
           }
-          if (term.startsWith("Ambiguous")) {
+          if (key.startsWith("ambiguous")) {
             return [
               appleSongWith("ambiguous-one", { name: "Ambiguous", artistName: "Artist", durationMs: 180_000 }),
               appleSongWith("ambiguous-two", { name: "Ambiguous", artistName: "Artist", durationMs: 180_000 })
             ];
           }
-          if (term.startsWith("Failed")) {
+          if (key.startsWith("failed")) {
             throw new Error("fetch failed");
           }
           return [];
         },
+        songsByIsrc: async () => [],
         getStorefront: async () => "us",
         createPlaylist: async () => "playlist",
         getStats: () => ({ requestCount: 4, retryCount: 0 }),
@@ -616,11 +774,11 @@ test("Apple Music retry replaces request failures with fresh semantic results", 
     ["matched", "matched", "not_found", "request_failed"]
   );
   assert.equal(report.results[0].requestFailure, undefined);
-  assert.equal(report.results[2].reason, "No results from Apple Music search");
+  assert.match(report.results[2].reason ?? "", /No results from Apple Music search/);
   assert.deepEqual(report.results[3].requestFailure, { kind: "network", operation: "search" });
 });
 
-test("Apple Music report refresh recomputes stale candidate distances", async () => {
+test("Apple Music report refresh upgrades stale ambiguous candidates", async () => {
   const { refreshAppleMatchReportCandidates } = await loadMatcherModule();
   const report = await refreshAppleMatchReportCandidates(
     {
@@ -630,25 +788,67 @@ test("Apple Music report refresh recomputes stale candidate distances", async ()
       results: [
         {
           track: {
-            originalName: "Song",
-            artists: ["Artist"],
-            albumName: "Album",
-            durationMs: 180_000,
+            originalName: "最強STRONGER",
+            artists: ["REDALiCE", "USAO"],
+            albumName: "最強STRONGER",
+            durationMs: 142_000,
             source: { provider: "netease", raw: {} }
           },
-          status: "not_found",
+          status: "ambiguous",
           candidates: [
             {
-              id: "good",
-              name: "Song",
-              artistName: "Artist",
-              albumName: "Album",
-              durationMs: 180_000,
-              titleDistance: 99,
-              storefront: "us"
+              id: "single",
+              name: "最強STRONGER",
+              artistName: "REDALiCE & USAO",
+              albumName: "最強STRONGER - Single",
+              durationMs: 142_000,
+              score: 0.95,
+              storefront: "cn"
+            },
+            {
+              id: "compilation",
+              name: "最強STRONGER",
+              artistName: "REDALiCE & USAO",
+              albumName: "Arcaea Sound Collection: Memories of Wrath",
+              durationMs: 143_000,
+              score: 0.88,
+              storefront: "cn"
             }
           ],
-          reason: "stale candidate order"
+          reason: "stale ambiguous"
+        },
+        {
+          track: {
+            originalName: "PUPA",
+            artists: ["モリモリあつし"],
+            albumName: "タイムカプセル",
+            durationMs: 128_000,
+            source: { provider: "netease", raw: {} }
+          },
+          status: "ambiguous",
+          candidates: [
+            {
+              id: "old-catalog",
+              name: "PUPA",
+              artistName: "モリモリあつし",
+              albumName: "タイムカプセル",
+              artworkUrl: cover("red"),
+              durationMs: 128_000,
+              score: 1,
+              storefront: "jp"
+            },
+            {
+              id: "new-catalog",
+              name: "PUPA",
+              artistName: "モリモリあつし",
+              albumName: "タイムカプセル",
+              artworkUrl: cover("blue"),
+              durationMs: 128_000,
+              score: 1,
+              storefront: "jp"
+            }
+          ],
+          reason: "stale ambiguous"
         }
       ]
     },
@@ -656,6 +856,9 @@ test("Apple Music report refresh recomputes stale candidate distances", async ()
   );
 
   assert.equal(report.results[0].status, "matched");
-  assert.equal(report.results[0].selectedId, "good");
-  assert.equal(report.results[0].candidates?.[0]?.titleDistance, 0);
+  assert.equal(report.results[0].selectedId, "single");
+  assert.equal(report.results[0].candidates?.[0]?.scoreBreakdown?.fields.album, 1);
+  assert.equal(report.results[1].status, "matched");
+  assert.equal(report.results[1].selectedId, "new-catalog");
+  assert.match(report.results[1].reason ?? "", /duplicate/i);
 });

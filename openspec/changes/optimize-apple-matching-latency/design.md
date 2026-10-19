@@ -65,11 +65,14 @@ not scoring CPU, dominate normal jobs.
 
 ### Resolve ISRCs lazily
 
-Matching always searches the account storefront, so automatically selected
-candidates are already addable to the library. A manually selected candidate is
-resolved to its addable catalog id when playlist creation collects final track
-IDs (via `resolveAppleMusicTrackIds`). Existing `addableId` values remain valid
-and are reused.
+An automatically selected native-store candidate is bridged immediately so the
+report remains ready for playlist creation. Ambiguous and not-found candidates
+are not bridged. A manually selected candidate is bridged when playlist creation
+collects final track IDs. Existing `addableId` values remain valid and are
+reused.
+
+This changes bridge complexity from retained candidates per track to selected
+cross-store tracks while preserving manual review.
 
 ### Reuse artwork comparison resources per job
 

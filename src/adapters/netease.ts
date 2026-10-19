@@ -1,4 +1,3 @@
-import { normalizeAlbumMetadata, normalizeTitleMetadata } from "../apple/titleDistance.js";
 import type { NormalizedPlaylist, NormalizedTrack } from "../types.js";
 import { firstNumber, firstObjectArray, firstString, joinNames, namesFromArray, readPath } from "./common.js";
 
@@ -29,19 +28,15 @@ function normalizeNeteaseTrack(input: unknown, playlistId?: string): NormalizedT
   const artists = namesFromArray(readPath(input, ["ar"]));
   const fallbackArtists = namesFromArray(readPath(input, ["artists"]));
   const allArtists = artists.length > 0 ? artists : fallbackArtists;
-  const titleMetadata = normalizeTitleMetadata(
-    firstString(readPath(input, ["name"]), readPath(input, ["title"])) ?? "",
-    allArtists
-  );
   const albumArtists = [
     ...namesFromArray(readPath(album, ["artists"])),
     ...namesFromArray(readPath(album, ["artist"]))
   ];
 
   return {
-    originalName: titleMetadata.title,
-    artists: titleMetadata.artists,
-    albumName: normalizeAlbumMetadata(firstString(readPath(album, ["name"]), readPath(input, ["albumName"]))),
+    originalName: firstString(readPath(input, ["name"]), readPath(input, ["title"])) ?? "",
+    artists: allArtists,
+    albumName: firstString(readPath(album, ["name"]), readPath(input, ["albumName"])),
     albumArtist: firstString(
       readPath(album, ["artist", "name"]),
       readPath(album, ["artistName"]),

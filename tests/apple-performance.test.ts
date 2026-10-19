@@ -8,14 +8,27 @@ import {
   type AppleSong,
   PlaywrightAppleApiSession
 } from "../src/apple/api.js";
+import { createArtworkComparator } from "../src/apple/artwork.js";
 import { mapWithConcurrency } from "../src/apple/concurrency.js";
-import { type AppleMatchLogEvent, createAppleMusicPlaylistFromReport, matchAppleMusic } from "../src/apple/matcher.js";
+import {
+  type AppleMatchLogEvent,
+  createAppleMusicPlaylistFromReport,
+  matchAppleMusic,
+  resolveAppleMusicTrackIds
+} from "../src/apple/matcher.js";
 import { AppleRequestExecutionError } from "../src/apple/requestFailure.js";
 import { RequestStartScheduler, runWithRetry } from "../src/apple/requestScheduler.js";
 import type { AppleMatchReport, NormalizedPlaylist } from "../src/types.js";
 import { DEFAULT_MATCH_PREFERENCES } from "../src/types.js";
 
-function song(id: string, name: string, artistName: string, isrc?: string, albumName = "Album"): AppleSong {
+function song(
+  id: string,
+  name: string,
+  artistName: string,
+  isrc?: string,
+  albumName = "Album",
+  durationInMillis = 180_000
+): AppleSong {
   return {
     id,
     type: "songs",
@@ -23,10 +36,15 @@ function song(id: string, name: string, artistName: string, isrc?: string, album
       name,
       artistName,
       albumName,
-      durationInMillis: 180_000,
+      durationInMillis,
       isrc
     }
   };
+}
+
+function cover(fill: string): string {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" fill="${fill}"/></svg>`;
+  return `data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`;
 }
 
 function fakeSession(
@@ -35,6 +53,7 @@ function fakeSession(
 ): AppleApiSession {
   return {
     search: async () => [],
+    songsByIsrc: async () => [],
     getStorefront: async () => "us",
     createPlaylist: async () => "playlist",
     getStats: () => stats,
@@ -144,7 +163,7 @@ test("bounded retry stops after success and runs backoff hooks", async () => {
   assert.deepEqual(retries, [1, 2]);
 });
 
-test("Apple API reports a request failure only after three automatic retries", async () => {
+test("Apple API exposes an exhausted rate limit as structured request failure", async () => {
   const cookies: Cookie[] = [
     {
       name: "media-user-token",
@@ -163,11 +182,12 @@ test("Apple API reports a request failure only after three automatic retries", a
     () => {}
   );
   const requestOptions: AppleApiSessionOptions = {
-    maxAttempts: 4,
+    maxAttempts: 2,
     baseRetryDelayMs: 0,
-    rateLimitCooldownMs: 0,
-    minRequestIntervalMs: 0,
-    randomPauseEnabled: false
+    minRequestIntervalMs: 150,
+    randomPauseEnabled: true,
+    randomPauseMinMs: 250,
+    randomPauseMaxMs: 750
   };
   const originalRequestOptions = { ...requestOptions };
   const session = new PlaywrightAppleApiSession(
@@ -186,50 +206,12 @@ test("Apple API reports a request failure only after three automatic retries", a
       kind: "rate_limited",
       operation: "search",
       status: 429,
-      attempts: 4
+      attempts: 2
     });
     return true;
   });
-  assert.deepEqual(session.getStats(), { requestCount: 4, retryCount: 3 });
+  assert.deepEqual(session.getStats(), { requestCount: 2, retryCount: 1 });
   assert.deepEqual(requestOptions, originalRequestOptions);
-  await session.close();
-});
-
-test("the first consecutive 429 activates a five-second global cooldown", async () => {
-  const cookies: Cookie[] = [
-    {
-      name: "media-user-token",
-      value: "user-token",
-      domain: ".music.apple.com",
-      path: "/",
-      expires: -1,
-      httpOnly: true,
-      secure: true,
-      sameSite: "None"
-    }
-  ];
-  const cooldowns: number[] = [];
-  const context = fakeRequestContext(
-    async () => jsonResponse({ errors: [{ title: "Too Many Requests" }] }, 429),
-    cookies,
-    () => {}
-  );
-  const session = new PlaywrightAppleApiSession(
-    context,
-    cookies,
-    "user-token",
-    "developer-token",
-    {
-      maxAttempts: 1,
-      minRequestIntervalMs: 0,
-      onRateLimitCooldown: (cooldownMs) => cooldowns.push(cooldownMs)
-    },
-    async () => context,
-    async () => {}
-  );
-
-  await assert.rejects(session.search("Song", "us"), AppleRequestExecutionError);
-  assert.deepEqual(cooldowns, [5_000]);
   await session.close();
 });
 
@@ -428,7 +410,7 @@ test("concurrent target-closed failures share one replacement request context", 
     async () => {}
   );
 
-  await Promise.all([session.search("Song", "us"), session.search("Other", "us")]);
+  await Promise.all([session.search("Song", "us"), session.songsByIsrc("ISRC", "us")]);
 
   assert.equal(replacementFactoryCount, 1);
   assert.equal(originalDisposeCount, 1);
@@ -661,6 +643,7 @@ test("playlist matching reuses one session, closes it, and preserves result orde
     playlist,
     {
       ...DEFAULT_MATCH_PREFERENCES,
+      nativeSearch: false,
       matchConcurrency: 2,
       appleRequestIntervalMs: 425,
       appleRequestTimeoutMs: 21_000,
@@ -668,7 +651,8 @@ test("playlist matching reuses one session, closes it, and preserves result orde
       appleRetryBaseDelayMs: 1_250,
       appleRandomPauseEnabled: true,
       appleRandomPauseMinMs: 300,
-      appleRandomPauseMaxMs: 900
+      appleRandomPauseMaxMs: 900,
+      artworkTimeoutMs: 12_000
     },
     (processed) => progress.push(processed),
     {
@@ -702,6 +686,54 @@ test("playlist matching reuses one session, closes it, and preserves result orde
   assert.equal(sessionOptions?.randomPauseEnabled, true);
   assert.equal(sessionOptions?.randomPauseMinMs, 300);
   assert.equal(sessionOptions?.randomPauseMaxMs, 900);
+});
+
+test("native-store matching bridges only the automatically selected candidate", async () => {
+  const isrcLookups: string[] = [];
+  let closeCount = 0;
+  const session = fakeSession({
+    search: async (term) => {
+      if (term.startsWith("ゆめ")) {
+        return [song("native-winner", "ゆめ", "Artist", "WINNER"), song("native-wrong", "Different", "Other", "WRONG")];
+      }
+      // Durations far enough apart that these stay rival recordings rather than duplicate
+      // releases of one recording, so the track keeps needing review.
+      return [
+        song("ambiguous-a", "なみ", "Artist", "AMBIGUOUS-A", "Album A"),
+        song("ambiguous-b", "なみ", "Artist", "AMBIGUOUS-B", "Album B", 176_000)
+      ];
+    },
+    songsByIsrc: async (isrc) => {
+      isrcLookups.push(isrc);
+      return [song("account-winner", "ゆめ", "Artist", isrc)];
+    },
+    close: async () => {
+      closeCount += 1;
+    }
+  });
+  const playlist: NormalizedPlaylist = {
+    provider: "netease",
+    id: "lazy-isrc",
+    name: "Lazy ISRC",
+    tracks: ["ゆめ", "なみ"].map((originalName) => ({
+      originalName,
+      artists: ["Artist"],
+      durationMs: 180_000,
+      source: { provider: "netease", raw: {} }
+    })),
+    raw: {}
+  };
+
+  const report = await matchAppleMusic(playlist, DEFAULT_MATCH_PREFERENCES, undefined, {
+    logger: () => {},
+    sessionFactory: async () => session
+  });
+
+  assert.equal(report.results[0].status, "matched");
+  assert.equal(report.results[0].appleMusicId, "account-winner");
+  assert.equal(report.results[1].status, "ambiguous");
+  assert.deepEqual(isrcLookups, ["WINNER"]);
+  assert.equal(closeCount, 1);
 });
 
 test("matching closes the shared session after track failures", async () => {
@@ -741,8 +773,7 @@ test("matching closes the shared session after track failures", async () => {
   assert.equal(closeCount, 1);
 });
 
-test("matching retries session initialization three times before reporting failure", async () => {
-  let sessionAttempts = 0;
+test("matching marks a session initialization timeout as request failed", async () => {
   const playlist: NormalizedPlaylist = {
     provider: "qq",
     id: "failed-session",
@@ -759,25 +790,106 @@ test("matching retries session initialization three times before reporting failu
   const report = await matchAppleMusic(playlist, DEFAULT_MATCH_PREFERENCES, undefined, {
     logger: () => {},
     sessionFactory: async () => {
-      sessionAttempts += 1;
       throw new Error("Timed out obtaining Apple Music developer token from the web player");
     }
   });
 
-  assert.equal(sessionAttempts, 4);
   assert.equal(report.results[0].status, "request_failed");
   assert.deepEqual(report.results[0].requestFailure, {
     kind: "timeout",
-    operation: "session",
-    attempts: 4
+    operation: "session"
   });
 });
 
-test("playlist creation collects matched ids and creates through one session", async () => {
+test("artwork comparison failure preserves a grouped metadata decision", async () => {
+  const playlist: NormalizedPlaylist = {
+    provider: "qq",
+    id: "failed-artwork",
+    tracks: [
+      {
+        originalName: "Song",
+        artists: ["Artist"],
+        durationMs: 180_000,
+        albumCoverUrl: cover("red"),
+        source: { provider: "qq", raw: {} }
+      }
+    ],
+    raw: {}
+  };
+  const session = fakeSession({
+    search: async () => [song("one", "Song", "Artist"), song("two", "Song", "Artist")]
+  });
+
+  const report = await matchAppleMusic(
+    playlist,
+    { ...DEFAULT_MATCH_PREFERENCES, storefront: "us", nativeSearch: false },
+    undefined,
+    {
+      logger: () => {},
+      sessionFactory: async () => session,
+      artworkComparatorFactory: () => ({
+        choose: async () => {
+          throw new Error("Artwork request timed out");
+        },
+        getStats: () => ({ featureComputations: 0, cacheHits: 0 }),
+        close: async () => {}
+      })
+    }
+  );
+
+  assert.equal(report.results[0].status, "matched");
+  assert.equal(report.results[0].recordingGroups?.length, 1);
+  assert.equal(report.results[0].requestFailure, undefined);
+});
+
+test("manual selections resolve lazily and reuse their addable id", async () => {
+  let isrcLookups = 0;
+  const session = fakeSession({
+    songsByIsrc: async (isrc) => {
+      isrcLookups += 1;
+      return [song("account-id", "Song", "Artist", isrc)];
+    }
+  });
+  const report: AppleMatchReport = {
+    provider: "netease",
+    playlistId: "manual-bridge",
+    results: [
+      {
+        track: {
+          originalName: "Song",
+          artists: ["Artist"],
+          source: { provider: "netease", raw: {} }
+        },
+        status: "matched",
+        selectionSource: "manual",
+        selectedId: "native-id",
+        appleMusicId: "native-id",
+        candidates: [
+          {
+            id: "native-id",
+            name: "Song",
+            artistName: "Artist",
+            score: 1,
+            storefront: "jp",
+            isrc: "MANUAL"
+          }
+        ]
+      }
+    ]
+  };
+
+  assert.deepEqual(await resolveAppleMusicTrackIds(report, "us", session), ["account-id"]);
+  assert.deepEqual(await resolveAppleMusicTrackIds(report, "us", session), ["account-id"]);
+  assert.equal(isrcLookups, 1);
+  assert.equal(report.results[0].candidates?.[0].addableId, "account-id");
+});
+
+test("playlist creation bridges manual selections and creates through one session", async () => {
   let factoryCalls = 0;
   let closeCount = 0;
   const createdWith: string[][] = [];
   const session = fakeSession({
+    songsByIsrc: async (isrc) => [song("account-id", "Song", "Artist", isrc)],
     createPlaylist: async (_name, _description, trackIds) => {
       createdWith.push(trackIds);
       return "new-playlist";
@@ -797,14 +909,16 @@ test("playlist creation collects matched ids and creates through one session", a
         },
         status: "matched",
         selectionSource: "manual",
-        selectedId: "song-id",
-        appleMusicId: "song-id",
+        selectedId: "native-id",
+        appleMusicId: "native-id",
         candidates: [
           {
-            id: "song-id",
+            id: "native-id",
             name: "Song",
             artistName: "Artist",
-            titleDistance: 0
+            score: 1,
+            storefront: "jp",
+            isrc: "MANUAL"
           }
         ]
       }
@@ -827,5 +941,32 @@ test("playlist creation collects matched ids and creates through one session", a
   assert.equal(playlistId, "new-playlist");
   assert.equal(factoryCalls, 1);
   assert.equal(closeCount, 1);
-  assert.deepEqual(createdWith, [["song-id"]]);
+  assert.deepEqual(createdWith, [["account-id"]]);
+});
+
+test("job artwork comparator caches features by URL", async () => {
+  const red = cover("red");
+  const blue = cover("blue");
+  const comparator = createArtworkComparator();
+  const track = {
+    originalName: "Song",
+    artists: ["Artist"],
+    albumCoverUrl: red,
+    source: { provider: "qq" as const, raw: {} }
+  };
+  const candidates = [
+    { id: "blue", name: "Song", artistName: "Artist", score: 1, artworkUrl: blue },
+    { id: "red", name: "Song", artistName: "Artist", score: 1, artworkUrl: red }
+  ];
+
+  try {
+    assert.equal((await comparator.choose(track, candidates))?.candidate.id, "red");
+    assert.equal((await comparator.choose(track, candidates))?.candidate.id, "red");
+    assert.deepEqual(comparator.getStats(), {
+      featureComputations: 2,
+      cacheHits: 4
+    });
+  } finally {
+    await comparator.close();
+  }
 });

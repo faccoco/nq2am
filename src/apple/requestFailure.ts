@@ -90,21 +90,43 @@ export function classifyLegacyAppleRequestFailure(reason: string | undefined): A
   };
 }
 
-export function normalizeLegacyAppleRequestFailures(report: AppleMatchReport): AppleMatchReport {
+function isLegacyScoreRejection(reason: string | undefined): boolean {
+  return Boolean(
+    reason &&
+      /best (?:match |recording group )?score .*below (?:the )?(?:match |review )?threshold|candidates? (?:were |was )?(?:returned|retrieved).*(?:rejected|below threshold)/iu.test(
+        reason
+      )
+  );
+}
+
+/** Normalize only legacy outcomes whose diagnostic text is unambiguous. */
+export function normalizeLegacyAppleMatchResults(report: AppleMatchReport): AppleMatchReport {
   let changed = false;
   const results = report.results.map((result) => {
     if (result.status !== "not_found") return result;
 
     const requestFailure = classifyLegacyAppleRequestFailure(result.reason);
-    if (!requestFailure) return result;
+    if (requestFailure) {
+      changed = true;
+      return {
+        ...result,
+        status: "request_failed" as const,
+        requestFailure
+      };
+    }
 
-    changed = true;
-    return {
-      ...result,
-      status: "request_failed" as const,
-      requestFailure
-    };
+    if (result.selectionSource !== "manual" && isLegacyScoreRejection(result.reason)) {
+      changed = true;
+      return {
+        ...result,
+        status: "score_rejected" as const
+      };
+    }
+    return result;
   });
 
   return changed ? { ...report, results } : report;
 }
+
+/** Compatibility name retained for existing callers. */
+export const normalizeLegacyAppleRequestFailures = normalizeLegacyAppleMatchResults;

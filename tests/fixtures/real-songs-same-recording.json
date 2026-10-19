@@ -1,0 +1,1757 @@
+{
+  "source": {
+    "task": "netease-13026355216",
+    "playlist": "GO",
+    "capturedAt": 1785008112778,
+    "threshold": 0.7,
+    "ambiguousGap": 0.1
+  },
+  "cases": [
+    {
+      "track": { "name": "証命讃歌", "artists": ["MyGO!!!!!"], "albumName": "証命讃歌", "durationMs": 192199 },
+      "expectedSelectedId": "1878078140",
+      "candidates": [
+        {
+          "id": "1878078140",
+          "name": "証命讃歌",
+          "artistName": "MyGO!!!!!",
+          "albumName": "証命讃歌 - Single",
+          "durationInMillis": 192200,
+          "isrc": "JPR562600050"
+        },
+        {
+          "id": "6784529621",
+          "name": "証命讃歌",
+          "artistName": "MyGO!!!!!",
+          "albumName": "致並跡",
+          "durationInMillis": 193800,
+          "isrc": "JPR562600050"
+        },
+        {
+          "id": "1821377399",
+          "name": "Anthem of My Existence",
+          "artistName": "Sugao",
+          "albumName": "Anthem of My Existence - Single",
+          "durationInMillis": 189390,
+          "isrc": "TCJPI2590403"
+        }
+      ]
+    },
+    {
+      "track": { "name": "静降想", "artists": ["MyGO!!!!!"], "albumName": "静降想", "durationMs": 278185 },
+      "expectedSelectedId": "1851418027",
+      "candidates": [
+        {
+          "id": "1851418027",
+          "name": "静降想",
+          "artistName": "MyGO!!!!!",
+          "albumName": "静降想 - Single",
+          "durationInMillis": 278187,
+          "isrc": "JPR562500332"
+        },
+        {
+          "id": "6784529626",
+          "name": "静降想",
+          "artistName": "MyGO!!!!!",
+          "albumName": "致並跡",
+          "durationInMillis": 277520,
+          "isrc": "JPR562500332"
+        },
+        {
+          "id": "1851418028",
+          "name": "エガクミライ",
+          "artistName": "MyGO!!!!!",
+          "albumName": "静降想 - Single",
+          "durationInMillis": 240413,
+          "isrc": "JPR562500288"
+        }
+      ]
+    },
+    {
+      "track": { "name": "エガクミライ", "artists": ["MyGO!!!!!"], "albumName": "エガクミライ", "durationMs": 239412 },
+      "expectedSelectedId": "1836389618",
+      "candidates": [
+        {
+          "id": "1836389618",
+          "name": "エガクミライ",
+          "artistName": "MyGO!!!!!",
+          "albumName": "エガクミライ - Single",
+          "durationInMillis": 239413,
+          "isrc": "JPR562500288"
+        },
+        {
+          "id": "1851418028",
+          "name": "エガクミライ",
+          "artistName": "MyGO!!!!!",
+          "albumName": "静降想 - Single",
+          "durationInMillis": 240413,
+          "isrc": "JPR562500288"
+        },
+        {
+          "id": "6784529623",
+          "name": "エガクミライ",
+          "artistName": "MyGO!!!!!",
+          "albumName": "致並跡",
+          "durationInMillis": 240427,
+          "isrc": "JPR562500288"
+        },
+        {
+          "id": "1855824539",
+          "name": "もう何もいらない未来",
+          "artistName": "トゲナシトゲアリ",
+          "albumName": "全部をさらして生きてやる",
+          "durationInMillis": 219270,
+          "isrc": "JPPO02503808"
+        },
+        {
+          "id": "1855824543",
+          "name": "荊の薔薇",
+          "artistName": "トゲナシトゲアリ",
+          "albumName": "全部をさらして生きてやる",
+          "durationInMillis": 216598,
+          "isrc": "JPPO02503811"
+        },
+        {
+          "id": "1536150264",
+          "name": "僕は君に恋をする",
+          "artistName": "平井 堅",
+          "albumName": "JAPANESE SINGER",
+          "durationInMillis": 309720,
+          "isrc": "JPN100901321"
+        },
+        {
+          "id": "1546601798",
+          "name": "僕は僕を好きになる",
+          "artistName": "乃木坂46",
+          "albumName": "僕は僕を好きになる (Special Edition)",
+          "durationInMillis": 291867,
+          "isrc": "JPU902003502"
+        },
+        {
+          "id": "1610996790",
+          "name": "ノンブレス・オブリージュ (Cover)",
+          "artistName": "超学生",
+          "albumName": "ノンブレス・オブリージュ (Cover) - Single",
+          "durationInMillis": 209256,
+          "isrc": "JPPC02111870"
+        }
+      ]
+    },
+    {
+      "track": { "name": "聿日箋秋", "artists": ["MyGO!!!!!"], "albumName": "聿日箋秋", "durationMs": 239025 },
+      "expectedSelectedId": "1807236517",
+      "candidates": [
+        {
+          "id": "1807236517",
+          "name": "聿日箋秋",
+          "artistName": "MyGO!!!!!",
+          "albumName": "聿日箋秋 - Single",
+          "durationInMillis": 239027,
+          "isrc": "JPR562500057"
+        },
+        {
+          "id": "6784529633",
+          "name": "聿日箋秋",
+          "artistName": "MyGO!!!!!",
+          "albumName": "致並跡",
+          "durationInMillis": 236867,
+          "isrc": "JPR562500057"
+        },
+        {
+          "id": "1801686494",
+          "name": "聿日箋秋",
+          "artistName": "MyGO!!!!!",
+          "albumName": "聿日箋秋 - Single",
+          "durationInMillis": 236360,
+          "isrc": "JPR562500057"
+        },
+        {
+          "id": "1807236518",
+          "name": "掌心正銘",
+          "artistName": "MyGO!!!!!",
+          "albumName": "聿日箋秋 - Single",
+          "durationInMillis": 221467,
+          "isrc": "JPR562500058"
+        }
+      ]
+    },
+    {
+      "track": { "name": "往欄印", "artists": ["MyGO!!!!!"], "albumName": "往欄印", "durationMs": 298145 },
+      "expectedSelectedId": "1824359335",
+      "candidates": [
+        {
+          "id": "1824359335",
+          "name": "往欄印",
+          "artistName": "MyGO!!!!!",
+          "albumName": "往欄印 - Single",
+          "durationInMillis": 298147,
+          "isrc": "JPR562500198"
+        },
+        {
+          "id": "6784529639",
+          "name": "往欄印",
+          "artistName": "MyGO!!!!!",
+          "albumName": "致並跡",
+          "durationInMillis": 296960,
+          "isrc": "JPR562500198"
+        },
+        {
+          "id": "1824359336",
+          "name": "残痕字",
+          "artistName": "MyGO!!!!!",
+          "albumName": "往欄印 - Single",
+          "durationInMillis": 255067,
+          "isrc": "JPR562500199"
+        }
+      ]
+    },
+    {
+      "track": { "name": "掌心正銘", "artists": ["MyGO!!!!!"], "albumName": "聿日箋秋", "durationMs": 221465 },
+      "expectedSelectedId": "1807236518",
+      "candidates": [
+        {
+          "id": "1807236518",
+          "name": "掌心正銘",
+          "artistName": "MyGO!!!!!",
+          "albumName": "聿日箋秋 - Single",
+          "durationInMillis": 221467,
+          "isrc": "JPR562500058"
+        },
+        {
+          "id": "6784529619",
+          "name": "掌心正銘",
+          "artistName": "MyGO!!!!!",
+          "albumName": "致並跡",
+          "durationInMillis": 220240,
+          "isrc": "JPR562500058"
+        }
+      ]
+    },
+    {
+      "track": { "name": "残痕字", "artists": ["MyGO!!!!!"], "albumName": "往欄印", "durationMs": 255065 },
+      "expectedSelectedId": "1824359336",
+      "candidates": [
+        {
+          "id": "1824359336",
+          "name": "残痕字",
+          "artistName": "MyGO!!!!!",
+          "albumName": "往欄印 - Single",
+          "durationInMillis": 255067,
+          "isrc": "JPR562500199"
+        },
+        {
+          "id": "6784529616",
+          "name": "残痕字",
+          "artistName": "MyGO!!!!!",
+          "albumName": "致並跡",
+          "durationInMillis": 253067,
+          "isrc": "JPR562500199"
+        },
+        {
+          "id": "1824591712",
+          "name": "残痕字 (TV Size)",
+          "artistName": "MyGO!!!!!",
+          "albumName": "残痕字 (TV Size) - Single",
+          "durationInMillis": 90386,
+          "isrc": "JPR562500233"
+        },
+        {
+          "id": "1832904915",
+          "name": "Mirage of the mind",
+          "artistName": "TOGENASHI TOGEARI",
+          "albumName": "Mirage of the mind - Single",
+          "durationInMillis": 159279,
+          "isrc": "JPPO02502612"
+        },
+        {
+          "id": "1840069118",
+          "name": "Mirage of the mind",
+          "artistName": "TOGENASHI TOGEARI",
+          "albumName": "Fragile Violet - EP",
+          "durationInMillis": 161723,
+          "isrc": "JPPO02502612"
+        }
+      ]
+    },
+    {
+      "track": {
+        "name": "天球(そら)のMúsica",
+        "artists": ["Ave Mujica"],
+        "albumName": "天球(そら)のMúsica",
+        "durationMs": 279479
+      },
+      "expectedSelectedId": "1802816613",
+      "candidates": [
+        {
+          "id": "1802816613",
+          "name": "天球(そら)のMúsica",
+          "artistName": "Ave Mujica",
+          "albumName": "天球(そら)のMúsica - Single",
+          "durationInMillis": 279480,
+          "isrc": "JPR562500067"
+        },
+        {
+          "id": "1807242086",
+          "name": "天球(そら)のMúsica",
+          "artistName": "Ave Mujica",
+          "albumName": "Completeness",
+          "durationInMillis": 279480,
+          "isrc": "JPR562500067"
+        },
+        {
+          "id": "6774068739",
+          "name": "天球(そら)のMúsica",
+          "artistName": "Ave Mujica",
+          "albumName": "Ave Música",
+          "durationInMillis": 280280,
+          "isrc": "JPR562500067"
+        },
+        {
+          "id": "1826733224",
+          "name": "DIVINE",
+          "artistName": "Ave Mujica",
+          "albumName": "DIVINE - Single",
+          "durationInMillis": 257627,
+          "isrc": "JPR562500262"
+        },
+        {
+          "id": "1783599226",
+          "name": "KiLLKiSS",
+          "artistName": "Ave Mujica",
+          "albumName": "KiLLKiSS - Single",
+          "durationInMillis": 208773,
+          "isrc": "JPR562400486"
+        },
+        {
+          "id": "1783405586",
+          "name": "黒のバースデイ",
+          "artistName": "Ave Mujica",
+          "albumName": "Alea jacta est - EP",
+          "durationInMillis": 226880,
+          "isrc": "JPR562300196"
+        },
+        {
+          "id": "1796790572",
+          "name": "Imprisoned XII",
+          "artistName": "Ave Mujica",
+          "albumName": "Imprisoned XII - Single",
+          "durationInMillis": 187107,
+          "isrc": "JPR562500063"
+        },
+        {
+          "id": "1807241689",
+          "name": "KiLLKiSS",
+          "artistName": "Ave Mujica",
+          "albumName": "Completeness",
+          "durationInMillis": 208773,
+          "isrc": "JPR562400486"
+        }
+      ]
+    },
+    {
+      "track": { "name": "顔", "artists": ["Ave Mujica"], "albumName": "顔", "durationMs": 242572 },
+      "expectedSelectedId": "1806042108",
+      "candidates": [
+        {
+          "id": "1806042108",
+          "name": "顔",
+          "artistName": "Ave Mujica",
+          "albumName": "顔 - Single",
+          "durationInMillis": 242573,
+          "isrc": "JPR562500066"
+        },
+        {
+          "id": "1807242084",
+          "name": "顔",
+          "artistName": "Ave Mujica",
+          "albumName": "Completeness",
+          "durationInMillis": 242573,
+          "isrc": "JPR562500066"
+        },
+        {
+          "id": "6774071958",
+          "name": "顔",
+          "artistName": "Ave Mujica",
+          "albumName": "Ave Música",
+          "durationInMillis": 243320,
+          "isrc": "JPR562500066"
+        },
+        {
+          "id": "1783405593",
+          "name": "Mas?uerade Rhapsody Re?uest",
+          "artistName": "Ave Mujica",
+          "albumName": "Alea jacta est - EP",
+          "durationInMillis": 242707,
+          "isrc": "JPR562300200"
+        },
+        {
+          "id": "1783598946",
+          "name": "Georgette Me, Georgette You",
+          "artistName": "Ave Mujica",
+          "albumName": "Georgette Me, Georgette You - Single",
+          "durationInMillis": 234680,
+          "isrc": "JPR562400487"
+        },
+        {
+          "id": "1783405594",
+          "name": "Ave Mujica",
+          "artistName": "Ave Mujica",
+          "albumName": "Alea jacta est - EP",
+          "durationInMillis": 255960,
+          "isrc": "JPR562300348"
+        },
+        {
+          "id": "1783405586",
+          "name": "黒のバースデイ",
+          "artistName": "Ave Mujica",
+          "albumName": "Alea jacta est - EP",
+          "durationInMillis": 226880,
+          "isrc": "JPR562300196"
+        },
+        {
+          "id": "1783405592",
+          "name": "神さま、バカ",
+          "artistName": "Ave Mujica",
+          "albumName": "Alea jacta est - EP",
+          "durationInMillis": 214760,
+          "isrc": "JPR562300199"
+        }
+      ]
+    },
+    {
+      "track": { "name": "八芒星ダンス", "artists": ["Ave Mujica"], "albumName": "Completeness", "durationMs": 229932 },
+      "expectedSelectedId": "1807242081",
+      "candidates": [
+        {
+          "id": "1807242081",
+          "name": "八芒星ダンス",
+          "artistName": "Ave Mujica",
+          "albumName": "Completeness",
+          "durationInMillis": 229933,
+          "isrc": "JPR562500065"
+        },
+        {
+          "id": "6774068736",
+          "name": "八芒星ダンス",
+          "artistName": "Ave Mujica",
+          "albumName": "Ave Música",
+          "durationInMillis": 230573,
+          "isrc": "JPR562500065"
+        }
+      ]
+    },
+    {
+      "track": { "name": "音一会", "artists": ["MyGO!!!!!"], "albumName": "迷跡波", "durationMs": 282013 },
+      "expectedSelectedId": "1783644616",
+      "candidates": [
+        {
+          "id": "1783601085",
+          "name": "音一会",
+          "artistName": "MyGO!!!!!",
+          "albumName": "音一会 - Single",
+          "durationInMillis": 282013,
+          "isrc": "JPR562300058"
+        },
+        {
+          "id": "1783644616",
+          "name": "音一会",
+          "artistName": "MyGO!!!!!",
+          "albumName": "迷跡波",
+          "durationInMillis": 282013,
+          "isrc": "JPR562300058"
+        },
+        {
+          "id": "1783821270",
+          "name": "音一会 (instrumental)",
+          "artistName": "MyGO!!!!!",
+          "albumName": "MyGO!!!!! Instrumental Collection 1",
+          "durationInMillis": 282013,
+          "isrc": "JPR562300059"
+        },
+        {
+          "id": "6784529639",
+          "name": "往欄印",
+          "artistName": "MyGO!!!!!",
+          "albumName": "致並跡",
+          "durationInMillis": 296960,
+          "isrc": "JPR562500198"
+        },
+        {
+          "id": "1824359335",
+          "name": "往欄印",
+          "artistName": "MyGO!!!!!",
+          "albumName": "往欄印 - Single",
+          "durationInMillis": 298147,
+          "isrc": "JPR562500198"
+        },
+        {
+          "id": "1783601086",
+          "name": "潜在表明",
+          "artistName": "MyGO!!!!!",
+          "albumName": "音一会 - Single",
+          "durationInMillis": 261920,
+          "isrc": "JPR562200437"
+        },
+        {
+          "id": "1783601088",
+          "name": "影色舞",
+          "artistName": "MyGO!!!!!",
+          "albumName": "音一会 - Single",
+          "durationInMillis": 209467,
+          "isrc": "JPR562200427"
+        },
+        {
+          "id": "1783541012",
+          "name": "焚音打",
+          "artistName": "MyGO!!!!!",
+          "albumName": "壱雫空 - Single",
+          "durationInMillis": 242920,
+          "isrc": "JPR562300273"
+        }
+      ]
+    },
+    {
+      "track": { "name": "焚音打", "artists": ["MyGO!!!!!"], "albumName": "跡暖空", "durationMs": 244239 },
+      "expectedSelectedId": "1779893394",
+      "candidates": [
+        {
+          "id": "1779893394",
+          "name": "焚音打",
+          "artistName": "MyGO!!!!!",
+          "albumName": "跡暖空",
+          "durationInMillis": 244240,
+          "isrc": "JPR562300273"
+        },
+        {
+          "id": "1783541012",
+          "name": "焚音打",
+          "artistName": "MyGO!!!!!",
+          "albumName": "壱雫空 - Single",
+          "durationInMillis": 242920,
+          "isrc": "JPR562300273"
+        },
+        {
+          "id": "1783821284",
+          "name": "焚音打 (instrumental)",
+          "artistName": "MyGO!!!!!",
+          "albumName": "MyGO!!!!! Instrumental Collection 1",
+          "durationInMillis": 242907,
+          "isrc": "JPR562300276"
+        },
+        {
+          "id": "1824359335",
+          "name": "往欄印",
+          "artistName": "MyGO!!!!!",
+          "albumName": "往欄印 - Single",
+          "durationInMillis": 298147,
+          "isrc": "JPR562500198"
+        },
+        {
+          "id": "6784529639",
+          "name": "往欄印",
+          "artistName": "MyGO!!!!!",
+          "albumName": "致並跡",
+          "durationInMillis": 296960,
+          "isrc": "JPR562500198"
+        }
+      ]
+    },
+    {
+      "track": { "name": "栞", "artists": ["MyGO!!!!!"], "albumName": "栞", "durationMs": 266413 },
+      "expectedSelectedId": "1783498842",
+      "candidates": [
+        {
+          "id": "1783498842",
+          "name": "栞",
+          "artistName": "MyGO!!!!!",
+          "albumName": "栞 - Single",
+          "durationInMillis": 266413,
+          "isrc": "JPR562300272"
+        },
+        {
+          "id": "1783645047",
+          "name": "栞",
+          "artistName": "MyGO!!!!!",
+          "albumName": "迷跡波",
+          "durationInMillis": 266413,
+          "isrc": "JPR562300272"
+        },
+        {
+          "id": "1783541011",
+          "name": "栞",
+          "artistName": "MyGO!!!!!",
+          "albumName": "壱雫空 - Single",
+          "durationInMillis": 266413,
+          "isrc": "JPR562300272"
+        },
+        {
+          "id": "1783821283",
+          "name": "栞 (instrumental)",
+          "artistName": "MyGO!!!!!",
+          "albumName": "MyGO!!!!! Instrumental Collection 1",
+          "durationInMillis": 265093,
+          "isrc": "JPR562300275"
+        },
+        {
+          "id": "1440789598",
+          "name": "Bokuwa Kimino Kotaeni Naritaina",
+          "artistName": "CreepHyp",
+          "albumName": "Sekaikan",
+          "durationInMillis": 210053,
+          "isrc": "JPPO01618576"
+        }
+      ]
+    },
+    {
+      "track": {
+        "name": "Imprisoned XII",
+        "artists": ["Ave Mujica"],
+        "albumName": "Imprisoned XII",
+        "durationMs": 187105
+      },
+      "expectedSelectedId": "1796790572",
+      "candidates": [
+        {
+          "id": "1796790572",
+          "name": "Imprisoned XII",
+          "artistName": "Ave Mujica",
+          "albumName": "Imprisoned XII - Single",
+          "durationInMillis": 187107,
+          "isrc": "JPR562500063"
+        },
+        {
+          "id": "1807241970",
+          "name": "Imprisoned XII",
+          "artistName": "Ave Mujica",
+          "albumName": "Completeness",
+          "durationInMillis": 188107,
+          "isrc": "JPR562500063"
+        },
+        {
+          "id": "6774072090",
+          "name": "Imprisoned XII",
+          "artistName": "Ave Mujica",
+          "albumName": "Ave Música",
+          "durationInMillis": 189133,
+          "isrc": "JPR562500063"
+        },
+        {
+          "id": "6788134309",
+          "name": "Imprisoned XII 【BanG Dream! Ave Mujica / 插曲】 – 音乐盒",
+          "artistName": "拉拉拜柠檬",
+          "albumName": "动漫歌曲与摇篮曲 - 音乐盒,第31辑",
+          "durationInMillis": 111158,
+          "isrc": "QZPJ32557881"
+        }
+      ]
+    },
+    {
+      "track": { "name": "FIRE BIRD", "artists": ["Roselia"], "albumName": "FIRE BIRD", "durationMs": 324866 },
+      "expectedSelectedId": "1799152490",
+      "candidates": [
+        {
+          "id": "1799152490",
+          "name": "FIRE BIRD",
+          "artistName": "Roselia",
+          "albumName": "FIRE BIRD - Single",
+          "durationInMillis": 324169,
+          "isrc": "JPR561900005"
+        },
+        {
+          "id": "1800388050",
+          "name": "FIRE BIRD",
+          "artistName": "Roselia",
+          "albumName": "Wahl",
+          "durationInMillis": 324169,
+          "isrc": "JPR561900005"
+        },
+        {
+          "id": "1799933713",
+          "name": "FIRE BIRD",
+          "artistName": "Roselia",
+          "albumName": "BanG Dream! Dreamer's Best",
+          "durationInMillis": 324169,
+          "isrc": "JPR561900005"
+        },
+        {
+          "id": "1800616689",
+          "name": "FIRE BIRD (instrumental)",
+          "artistName": "Roselia",
+          "albumName": "Roselia Instrumental Collection 1",
+          "durationInMillis": 324600,
+          "isrc": "JPR561900007"
+        },
+        {
+          "id": "1799152494",
+          "name": "Ringing Bloom",
+          "artistName": "Roselia",
+          "albumName": "FIRE BIRD - Single",
+          "durationInMillis": 334869,
+          "isrc": "JPR561900006"
+        },
+        {
+          "id": "1551727012",
+          "name": "Guren No Yumiya (Attack on Titan)",
+          "artistName": "NateWantsToBattle",
+          "albumName": "Guren No Yumiya (Attack on Titan) - Single",
+          "durationInMillis": 306977,
+          "isrc": "QZGWX2113141"
+        },
+        {
+          "id": "1538809230",
+          "name": "Hawái (Remix)",
+          "artistName": "Maluma & Abel Tesfaye",
+          "albumName": "Hawái (Remix) - Single",
+          "durationInMillis": 200028,
+          "isrc": "USSD12000526"
+        },
+        {
+          "id": "1652789038",
+          "name": "Guren No Yumiya - Epic Orchestral Version (Cover)",
+          "artistName": "Samuel Kim",
+          "albumName": "Attack on Titan: Epic Collection (Cover)",
+          "durationInMillis": 182771,
+          "isrc": "QZNWS2034612"
+        }
+      ]
+    },
+    {
+      "track": {
+        "name": "Georgette Me, Georgette You",
+        "artists": ["Ave Mujica"],
+        "albumName": "Georgette Me, Georgette You",
+        "durationMs": 234679
+      },
+      "expectedSelectedId": "1783598946",
+      "candidates": [
+        {
+          "id": "1783598946",
+          "name": "Georgette Me, Georgette You",
+          "artistName": "Ave Mujica",
+          "albumName": "Georgette Me, Georgette You - Single",
+          "durationInMillis": 234680,
+          "isrc": "JPR562400487"
+        },
+        {
+          "id": "6774071959",
+          "name": "Georgette Me, Georgette You",
+          "artistName": "Ave Mujica",
+          "albumName": "Ave Música",
+          "durationInMillis": 234560,
+          "isrc": "JPR562400487"
+        },
+        {
+          "id": "1807241966",
+          "name": "Georgette Me, Georgette You",
+          "artistName": "Ave Mujica",
+          "albumName": "Completeness",
+          "durationInMillis": 234187,
+          "isrc": "JPR562400487"
+        },
+        {
+          "id": "6783527652",
+          "name": "Georgette Me, Georgette You 【BanG Dream! Ave Mujica / ED】 – 音乐盒",
+          "artistName": "拉拉拜柠檬",
+          "albumName": "动漫歌曲与摇篮曲 - 音乐盒,第30辑",
+          "durationInMillis": 65684,
+          "isrc": "QZPJ32555726"
+        }
+      ]
+    },
+    {
+      "track": { "name": "KiLLKiSS", "artists": ["Ave Mujica"], "albumName": "KiLLKiSS", "durationMs": 208772 },
+      "expectedSelectedId": "1783599226",
+      "candidates": [
+        {
+          "id": "1783599226",
+          "name": "KiLLKiSS",
+          "artistName": "Ave Mujica",
+          "albumName": "KiLLKiSS - Single",
+          "durationInMillis": 208773,
+          "isrc": "JPR562400486"
+        },
+        {
+          "id": "1807241689",
+          "name": "KiLLKiSS",
+          "artistName": "Ave Mujica",
+          "albumName": "Completeness",
+          "durationInMillis": 208773,
+          "isrc": "JPR562400486"
+        },
+        {
+          "id": "6774071954",
+          "name": "KiLLKiSS",
+          "artistName": "Ave Mujica",
+          "albumName": "Ave Música",
+          "durationInMillis": 209627,
+          "isrc": "JPR562400486"
+        },
+        {
+          "id": "1792946639",
+          "name": "KiLLKiSS(动画《BanG Dream! Ave Mujica》OP) [钢琴编曲]",
+          "artistName": "HalcyonMusic",
+          "albumName": "KiLLKiSS(动画《BanG Dream! Ave Mujica》OP) (钢琴编曲) - Single",
+          "durationInMillis": 204434,
+          "isrc": "QZPJ32446259"
+        },
+        {
+          "id": "1801656977",
+          "name": "Killkiss (Karaoke) [Originally Performed by Ave Mujica]",
+          "artistName": "Karaoke Manekineko",
+          "albumName": "Killkiss (Karaoke) [Ave Mujica]",
+          "durationInMillis": 208096,
+          "isrc": "JPR502506772"
+        },
+        {
+          "id": "1801657191",
+          "name": "Killkiss +3key (Karaoke) [Originally Performed by Ave Mujica]",
+          "artistName": "Karaoke Manekineko",
+          "albumName": "Killkiss (Karaoke) [Ave Mujica]",
+          "durationInMillis": 208096,
+          "isrc": "JPR502506776"
+        },
+        {
+          "id": "1801656978",
+          "name": "Killkiss +1key (Karaoke) [Originally Performed by Ave Mujica]",
+          "artistName": "Karaoke Manekineko",
+          "albumName": "Killkiss (Karaoke) [Ave Mujica]",
+          "durationInMillis": 208096,
+          "isrc": "JPR502506773"
+        },
+        {
+          "id": "1801657206",
+          "name": "Killkiss -5key (Karaoke) [Originally Performed by Ave Mujica]",
+          "artistName": "Karaoke Manekineko",
+          "albumName": "Killkiss (Karaoke) [Ave Mujica]",
+          "durationInMillis": 208096,
+          "isrc": "JPR502506798"
+        }
+      ]
+    },
+    {
+      "track": { "name": "Symbol I : △", "artists": ["Ave Mujica"], "albumName": "Symbol I : △", "durationMs": 312186 },
+      "expectedSelectedId": "1783821101",
+      "candidates": [
+        {
+          "id": "1783821101",
+          "name": "Symbol I : △",
+          "artistName": "Ave Mujica",
+          "albumName": "Symbol I : △ - Single",
+          "durationInMillis": 312187,
+          "isrc": "JPR562400133"
+        },
+        {
+          "id": "1768181432",
+          "name": "Symbol I : △",
+          "artistName": "Ave Mujica",
+          "albumName": "ELEMENTS - EP",
+          "durationInMillis": 312187,
+          "isrc": "JPR562400133"
+        },
+        {
+          "id": "6774071956",
+          "name": "Symbol I : △",
+          "artistName": "Ave Mujica",
+          "albumName": "Ave Música",
+          "durationInMillis": 314760,
+          "isrc": "JPR562400133"
+        }
+      ]
+    },
+    {
+      "track": { "name": "Angles", "artists": ["Ave Mujica"], "albumName": "Angles", "durationMs": 275093 },
+      "expectedSelectedId": "1783422482",
+      "candidates": [
+        {
+          "id": "1783422482",
+          "name": "Angles",
+          "artistName": "Ave Mujica",
+          "albumName": "Angles - Single",
+          "durationInMillis": 275093,
+          "isrc": "JPR562300584"
+        },
+        {
+          "id": "1783541479",
+          "name": "Angles",
+          "artistName": "Ave Mujica",
+          "albumName": "素晴らしき世界 でも どこにもない場所 - Single",
+          "durationInMillis": 275080,
+          "isrc": "JPR562300584"
+        }
+      ]
+    },
+    {
+      "track": {
+        "name": "ふたつの月 ~Deep Into The Forest~",
+        "artists": ["Ave Mujica"],
+        "albumName": "ふたつの月 ~Deep Into The Forest~",
+        "durationMs": 295813
+      },
+      "expectedSelectedId": "1783498392",
+      "candidates": [
+        {
+          "id": "1783498392",
+          "name": "ふたつの月 ~Deep Into The Forest~",
+          "artistName": "Ave Mujica",
+          "albumName": "ふたつの月 ~Deep Into The Forest~ - Single",
+          "durationInMillis": 295813,
+          "isrc": "JPR562300197"
+        },
+        {
+          "id": "1783405590",
+          "name": "ふたつの月 ~Deep Into The Forest~",
+          "artistName": "Ave Mujica",
+          "albumName": "Alea jacta est - EP",
+          "durationInMillis": 296307,
+          "isrc": "JPR562300197"
+        }
+      ]
+    },
+    {
+      "track": {
+        "name": "黒のバースデイ",
+        "artists": ["Ave Mujica"],
+        "albumName": "黒のバースデイ",
+        "durationMs": 225706
+      },
+      "expectedSelectedId": "1783500427",
+      "candidates": [
+        {
+          "id": "1783500427",
+          "name": "黒のバースデイ",
+          "artistName": "Ave Mujica",
+          "albumName": "黒のバースデイ - Single",
+          "durationInMillis": 225707,
+          "isrc": "JPR562300196"
+        },
+        {
+          "id": "6774068735",
+          "name": "黒のバースデイ",
+          "artistName": "Ave Mujica",
+          "albumName": "Ave Música",
+          "durationInMillis": 226800,
+          "isrc": "JPR562300196"
+        },
+        {
+          "id": "1783405586",
+          "name": "黒のバースデイ",
+          "artistName": "Ave Mujica",
+          "albumName": "Alea jacta est - EP",
+          "durationInMillis": 226880,
+          "isrc": "JPR562300196"
+        }
+      ]
+    },
+    {
+      "track": { "name": "Ether", "artists": ["Ave Mujica"], "albumName": "Ether", "durationMs": 285666 },
+      "expectedSelectedId": "1783404941",
+      "candidates": [
+        {
+          "id": "1783404941",
+          "name": "Ether",
+          "artistName": "Ave Mujica",
+          "albumName": "Ether - Single",
+          "durationInMillis": 285667,
+          "isrc": "JPR562400234"
+        },
+        {
+          "id": "1768181439",
+          "name": "Ether",
+          "artistName": "Ave Mujica",
+          "albumName": "ELEMENTS - EP",
+          "durationInMillis": 285667,
+          "isrc": "JPR562400234"
+        },
+        {
+          "id": "6774072091",
+          "name": "Ether",
+          "artistName": "Ave Mujica",
+          "albumName": "Ave Música",
+          "durationInMillis": 287773,
+          "isrc": "JPR562400234"
+        }
+      ]
+    },
+    {
+      "track": {
+        "name": "Mas?uerade Rhapsody Re?uest",
+        "artists": ["Ave Mujica"],
+        "albumName": "Mas?uerade Rhapsody Re?uest",
+        "durationMs": 242720
+      },
+      "expectedSelectedId": "1783405258",
+      "candidates": [
+        {
+          "id": "1783405258",
+          "name": "Mas?uerade Rhapsody Re?uest",
+          "artistName": "Ave Mujica",
+          "albumName": "Mas?uerade Rhapsody Re?uest - Single",
+          "durationInMillis": 242720,
+          "isrc": "JPR562300200"
+        },
+        {
+          "id": "1783405593",
+          "name": "Mas?uerade Rhapsody Re?uest",
+          "artistName": "Ave Mujica",
+          "albumName": "Alea jacta est - EP",
+          "durationInMillis": 242707,
+          "isrc": "JPR562300200"
+        }
+      ]
+    },
+    {
+      "track": {
+        "name": "Symbol IV : Earth",
+        "artists": ["Ave Mujica"],
+        "albumName": "Symbol IV : Earth",
+        "durationMs": 239093
+      },
+      "expectedSelectedId": "1784360470",
+      "candidates": [
+        {
+          "id": "1784360470",
+          "name": "Symbol IV : Earth",
+          "artistName": "Ave Mujica",
+          "albumName": "Symbol IV : Earth - Single",
+          "durationInMillis": 239093,
+          "isrc": "JPR562400195"
+        },
+        {
+          "id": "1768181438",
+          "name": "Symbol IV : Earth",
+          "artistName": "Ave Mujica",
+          "albumName": "ELEMENTS - EP",
+          "durationInMillis": 239093,
+          "isrc": "JPR562400195"
+        }
+      ]
+    },
+    {
+      "track": {
+        "name": "天ノ弱 (Cover)",
+        "artists": ["Afterglow"],
+        "albumName": "バンドリ！ ガールズバンドパーティ！ カバーコレクションVol.4",
+        "durationMs": 187426
+      },
+      "expectedSelectedId": "1801676372",
+      "candidates": [
+        {
+          "id": "1801676372",
+          "name": "天ノ弱 (Cover)",
+          "artistName": "Afterglow",
+          "albumName": "バンドリ! ガールズバンドパーティ! カバーコレクションVol.4",
+          "durationInMillis": 187767,
+          "isrc": "JPR561900223"
+        },
+        {
+          "id": "1798427128",
+          "name": "天ノ弱 (Cover)",
+          "artistName": "Afterglow",
+          "albumName": "ガルパ ボカロカバーコレクション",
+          "durationInMillis": 187767,
+          "isrc": "JPR561900223"
+        },
+        {
+          "id": "977518041",
+          "name": "天ノ弱",
+          "artistName": "ぐるたみん",
+          "albumName": "み ‐GLUTAMINE BEST‐(初回盤)",
+          "durationInMillis": 187500,
+          "isrc": "JPC231500289"
+        },
+        {
+          "id": "1467141112",
+          "name": "天ノ弱",
+          "artistName": "164",
+          "albumName": "EXIT TUNES PRESENTS Gumissimo from Megpoid ―10th ANNIVERSARY BEST―",
+          "durationInMillis": 188000,
+          "isrc": "JPC231500145"
+        },
+        {
+          "id": "1013778775",
+          "name": "天ノ弱",
+          "artistName": "164",
+          "albumName": "天ノ弱 (feat. Mayumi Morinaga)",
+          "durationInMillis": 186500,
+          "isrc": "JPC231200950"
+        },
+        {
+          "id": "975208079",
+          "name": "天ノ弱",
+          "artistName": "164",
+          "albumName": "EXIT TUNES PRESENTS THE BEST OF GUMI from Megpoid",
+          "durationInMillis": 186300,
+          "isrc": "JPC231500145"
+        },
+        {
+          "id": "1635863689",
+          "name": "天ノ弱",
+          "artistName": "和楽器バンド",
+          "albumName": "ボカロ三昧2",
+          "durationInMillis": 185600,
+          "isrc": "JPPO02202808"
+        },
+        {
+          "id": "1231376789",
+          "name": "天ノ弱",
+          "artistName": "+α/あるふぁきゅん。",
+          "albumName": "ALMATIC.",
+          "durationInMillis": 185267,
+          "isrc": "JPTK01612570"
+        }
+      ]
+    },
+    {
+      "track": { "name": "焚音打", "artists": ["MyGO!!!!!"], "albumName": "壱雫空", "durationMs": 242920 },
+      "expectedSelectedId": "1783541012",
+      "candidates": [
+        {
+          "id": "1783541012",
+          "name": "焚音打",
+          "artistName": "MyGO!!!!!",
+          "albumName": "壱雫空 - Single",
+          "durationInMillis": 242920,
+          "isrc": "JPR562300273"
+        },
+        {
+          "id": "1779893394",
+          "name": "焚音打",
+          "artistName": "MyGO!!!!!",
+          "albumName": "跡暖空",
+          "durationInMillis": 244240,
+          "isrc": "JPR562300273"
+        },
+        {
+          "id": "1783821284",
+          "name": "焚音打 (instrumental)",
+          "artistName": "MyGO!!!!!",
+          "albumName": "MyGO!!!!! Instrumental Collection 1",
+          "durationInMillis": 242907,
+          "isrc": "JPR562300276"
+        },
+        {
+          "id": "1824359335",
+          "name": "往欄印",
+          "artistName": "MyGO!!!!!",
+          "albumName": "往欄印 - Single",
+          "durationInMillis": 298147,
+          "isrc": "JPR562500198"
+        },
+        {
+          "id": "6784529639",
+          "name": "往欄印",
+          "artistName": "MyGO!!!!!",
+          "albumName": "致並跡",
+          "durationInMillis": 296960,
+          "isrc": "JPR562500198"
+        }
+      ]
+    },
+    {
+      "track": { "name": "回層浮", "artists": ["MyGO!!!!!"], "albumName": "砂寸奏／回層浮", "durationMs": 261240 },
+      "expectedSelectedId": "1784376470",
+      "candidates": [
+        {
+          "id": "1784376470",
+          "name": "回層浮",
+          "artistName": "MyGO!!!!!",
+          "albumName": "砂寸奏/回層浮 - Single",
+          "durationInMillis": 261240,
+          "isrc": "JPR562400027"
+        },
+        {
+          "id": "1779893390",
+          "name": "回層浮",
+          "artistName": "MyGO!!!!!",
+          "albumName": "跡暖空",
+          "durationInMillis": 261747,
+          "isrc": "JPR562400027"
+        },
+        {
+          "id": "1784376471",
+          "name": "処救生",
+          "artistName": "MyGO!!!!!",
+          "albumName": "砂寸奏/回層浮 - Single",
+          "durationInMillis": 217493,
+          "isrc": "JPR562300524"
+        },
+        {
+          "id": "1784376318",
+          "name": "砂寸奏",
+          "artistName": "MyGO!!!!!",
+          "albumName": "砂寸奏/回層浮 - Single",
+          "durationInMillis": 223600,
+          "isrc": "JPR562400026"
+        }
+      ]
+    },
+    {
+      "track": { "name": "端程山", "artists": ["MyGO!!!!!"], "albumName": "端程山", "durationMs": 260973 },
+      "expectedSelectedId": "1783498579",
+      "candidates": [
+        {
+          "id": "1783498579",
+          "name": "端程山",
+          "artistName": "MyGO!!!!!",
+          "albumName": "端程山 - Single",
+          "durationInMillis": 260973,
+          "isrc": "JPR562400187"
+        },
+        {
+          "id": "1779893142",
+          "name": "端程山",
+          "artistName": "MyGO!!!!!",
+          "albumName": "跡暖空",
+          "durationInMillis": 261987,
+          "isrc": "JPR562400187"
+        },
+        {
+          "id": "1783498582",
+          "name": "孤壊牢",
+          "artistName": "MyGO!!!!!",
+          "albumName": "端程山 - Single",
+          "durationInMillis": 214587,
+          "isrc": "JPR562400188"
+        },
+        {
+          "id": "1783498580",
+          "name": "輪符雨",
+          "artistName": "MyGO!!!!!",
+          "albumName": "端程山 - Single",
+          "durationInMillis": 207573,
+          "isrc": "JPR562400098"
+        }
+      ]
+    },
+    {
+      "track": { "name": "名無声", "artists": ["MyGO!!!!!"], "albumName": "迷跡波", "durationMs": 271653 },
+      "expectedSelectedId": "1783645044",
+      "candidates": [
+        {
+          "id": "1783645044",
+          "name": "名無声",
+          "artistName": "MyGO!!!!!",
+          "albumName": "迷跡波",
+          "durationInMillis": 271653,
+          "isrc": "JPR562200378"
+        },
+        {
+          "id": "1783599670",
+          "name": "名無声",
+          "artistName": "MyGO!!!!!",
+          "albumName": "迷星叫 - Single",
+          "durationInMillis": 271653,
+          "isrc": "JPR562200378"
+        },
+        {
+          "id": "1783821268",
+          "name": "名無声 (instrumental)",
+          "artistName": "MyGO!!!!!",
+          "albumName": "MyGO!!!!! Instrumental Collection 1",
+          "durationInMillis": 272347,
+          "isrc": "JPR562200380"
+        },
+        {
+          "id": "1824359336",
+          "name": "残痕字",
+          "artistName": "MyGO!!!!!",
+          "albumName": "往欄印 - Single",
+          "durationInMillis": 255067,
+          "isrc": "JPR562500199"
+        },
+        {
+          "id": "1824359335",
+          "name": "往欄印",
+          "artistName": "MyGO!!!!!",
+          "albumName": "往欄印 - Single",
+          "durationInMillis": 298147,
+          "isrc": "JPR562500198"
+        },
+        {
+          "id": "1783644604",
+          "name": "迷星叫",
+          "artistName": "MyGO!!!!!",
+          "albumName": "迷跡波",
+          "durationInMillis": 211373,
+          "isrc": "JPR562200377"
+        },
+        {
+          "id": "1783645039",
+          "name": "迷路日々",
+          "artistName": "MyGO!!!!!",
+          "albumName": "迷跡波",
+          "durationInMillis": 215453,
+          "isrc": "JPR562300279"
+        },
+        {
+          "id": "1783540641",
+          "name": "無路矢",
+          "artistName": "MyGO!!!!!",
+          "albumName": "無路矢 - Single",
+          "durationInMillis": 222933,
+          "isrc": "JPR562300217"
+        }
+      ]
+    },
+    {
+      "track": { "name": "詩超絆", "artists": ["MyGO!!!!!"], "albumName": "詩超絆", "durationMs": 237200 },
+      "expectedSelectedId": "1783498251",
+      "candidates": [
+        {
+          "id": "1783498251",
+          "name": "詩超絆",
+          "artistName": "MyGO!!!!!",
+          "albumName": "詩超絆 - Single",
+          "durationInMillis": 237200,
+          "isrc": "JPR562300278"
+        },
+        {
+          "id": "1783644618",
+          "name": "詩超絆",
+          "artistName": "MyGO!!!!!",
+          "albumName": "迷跡波",
+          "durationInMillis": 237200,
+          "isrc": "JPR562300278"
+        }
+      ]
+    },
+    {
+      "track": { "name": "碧天伴走", "artists": ["MyGO!!!!!"], "albumName": "碧天伴走", "durationMs": 218866 },
+      "expectedSelectedId": "1783622708",
+      "candidates": [
+        {
+          "id": "1783622708",
+          "name": "碧天伴走",
+          "artistName": "MyGO!!!!!",
+          "albumName": "碧天伴走 - Single",
+          "durationInMillis": 218867,
+          "isrc": "JPR562300277"
+        },
+        {
+          "id": "1783644610",
+          "name": "碧天伴走",
+          "artistName": "MyGO!!!!!",
+          "albumName": "迷跡波",
+          "durationInMillis": 218867,
+          "isrc": "JPR562300277"
+        }
+      ]
+    },
+    {
+      "track": { "name": "迷星叫", "artists": ["MyGO!!!!!"], "albumName": "迷跡波", "durationMs": 211373 },
+      "expectedSelectedId": "1783644604",
+      "candidates": [
+        {
+          "id": "1768009413",
+          "name": "迷星叫",
+          "artistName": "MyGO!!!!!",
+          "albumName": "迷星叫 - Single",
+          "durationInMillis": 211373,
+          "isrc": "JPR562200377"
+        },
+        {
+          "id": "1783644604",
+          "name": "迷星叫",
+          "artistName": "MyGO!!!!!",
+          "albumName": "迷跡波",
+          "durationInMillis": 211373,
+          "isrc": "JPR562200377"
+        },
+        {
+          "id": "1783599667",
+          "name": "迷星叫",
+          "artistName": "MyGO!!!!!",
+          "albumName": "迷星叫 - Single",
+          "durationInMillis": 211373,
+          "isrc": "JPR562200377"
+        },
+        {
+          "id": "1783821267",
+          "name": "迷星叫 (instrumental)",
+          "artistName": "MyGO!!!!!",
+          "albumName": "MyGO!!!!! Instrumental Collection 1",
+          "durationInMillis": 210693,
+          "isrc": "JPR562200379"
+        },
+        {
+          "id": "1783645039",
+          "name": "迷路日々",
+          "artistName": "MyGO!!!!!",
+          "albumName": "迷跡波",
+          "durationInMillis": 215453,
+          "isrc": "JPR562300279"
+        },
+        {
+          "id": "1783499218",
+          "name": "迷路日々",
+          "artistName": "MyGO!!!!!",
+          "albumName": "迷路日々 - Single",
+          "durationInMillis": 215453,
+          "isrc": "JPR562300279"
+        },
+        {
+          "id": "1783644618",
+          "name": "詩超絆",
+          "artistName": "MyGO!!!!!",
+          "albumName": "迷跡波",
+          "durationInMillis": 237200,
+          "isrc": "JPR562300278"
+        },
+        {
+          "id": "1783599670",
+          "name": "名無声",
+          "artistName": "MyGO!!!!!",
+          "albumName": "迷星叫 - Single",
+          "durationInMillis": 271653,
+          "isrc": "JPR562200378"
+        }
+      ]
+    },
+    {
+      "track": { "name": "砂寸奏", "artists": ["MyGO!!!!!"], "albumName": "砂寸奏／回層浮", "durationMs": 223600 },
+      "expectedSelectedId": "1784376318",
+      "candidates": [
+        {
+          "id": "1784376318",
+          "name": "砂寸奏",
+          "artistName": "MyGO!!!!!",
+          "albumName": "砂寸奏/回層浮 - Single",
+          "durationInMillis": 223600,
+          "isrc": "JPR562400026"
+        },
+        {
+          "id": "1779893392",
+          "name": "砂寸奏",
+          "artistName": "MyGO!!!!!",
+          "albumName": "跡暖空",
+          "durationInMillis": 224773,
+          "isrc": "JPR562400026"
+        },
+        {
+          "id": "1784376471",
+          "name": "処救生",
+          "artistName": "MyGO!!!!!",
+          "albumName": "砂寸奏/回層浮 - Single",
+          "durationInMillis": 217493,
+          "isrc": "JPR562300524"
+        },
+        {
+          "id": "1784376470",
+          "name": "回層浮",
+          "artistName": "MyGO!!!!!",
+          "albumName": "砂寸奏/回層浮 - Single",
+          "durationInMillis": 261240,
+          "isrc": "JPR562400027"
+        }
+      ]
+    },
+    {
+      "track": { "name": "壱雫空", "artists": ["MyGO!!!!!"], "albumName": "壱雫空", "durationMs": 189586 },
+      "expectedSelectedId": "1777382324",
+      "candidates": [
+        {
+          "id": "1777382324",
+          "name": "壱雫空",
+          "artistName": "MyGO!!!!!",
+          "albumName": "壱雫空 - Single",
+          "durationInMillis": 189587,
+          "isrc": "JPR562300271"
+        },
+        {
+          "id": "1783541010",
+          "name": "壱雫空",
+          "artistName": "MyGO!!!!!",
+          "albumName": "壱雫空 - Single",
+          "durationInMillis": 189587,
+          "isrc": "JPR562300271"
+        },
+        {
+          "id": "1783644606",
+          "name": "壱雫空",
+          "artistName": "MyGO!!!!!",
+          "albumName": "迷跡波",
+          "durationInMillis": 189587,
+          "isrc": "JPR562300271"
+        },
+        {
+          "id": "1783821281",
+          "name": "壱雫空 (instrumental)",
+          "artistName": "MyGO!!!!!",
+          "albumName": "MyGO!!!!! Instrumental Collection 1",
+          "durationInMillis": 188920,
+          "isrc": "JPR562300274"
+        },
+        {
+          "id": "1797800775",
+          "name": "壱雫空",
+          "artistName": "신성(곽민기) & 세오(이민서)",
+          "albumName": "壱雫空 - Single",
+          "durationInMillis": 92062,
+          "isrc": "GX8KD2531005"
+        },
+        {
+          "id": "1783541012",
+          "name": "焚音打",
+          "artistName": "MyGO!!!!!",
+          "albumName": "壱雫空 - Single",
+          "durationInMillis": 242920,
+          "isrc": "JPR562300273"
+        },
+        {
+          "id": "1783541011",
+          "name": "栞",
+          "artistName": "MyGO!!!!!",
+          "albumName": "壱雫空 - Single",
+          "durationInMillis": 266413,
+          "isrc": "JPR562300272"
+        }
+      ]
+    },
+    {
+      "track": { "name": "過惰幻", "artists": ["MyGO!!!!!"], "albumName": "過惰幻", "durationMs": 237613 },
+      "expectedSelectedId": "1766907429",
+      "candidates": [
+        {
+          "id": "1766907429",
+          "name": "過惰幻",
+          "artistName": "MyGO!!!!!",
+          "albumName": "過惰幻 - Single",
+          "durationInMillis": 237613,
+          "isrc": "JPR562400285"
+        },
+        {
+          "id": "1779893148",
+          "name": "過惰幻",
+          "artistName": "MyGO!!!!!",
+          "albumName": "跡暖空",
+          "durationInMillis": 238120,
+          "isrc": "JPR562400285"
+        }
+      ]
+    },
+    {
+      "track": { "name": "Neo-Aspect", "artists": ["Roselia"], "albumName": "Wahl", "durationMs": 310300 },
+      "expectedSelectedId": "1800388069",
+      "candidates": [
+        {
+          "id": "1800388069",
+          "name": "Neo-Aspect",
+          "artistName": "Roselia",
+          "albumName": "Wahl",
+          "durationInMillis": 310300,
+          "isrc": "JPR561900273"
+        },
+        {
+          "id": "1799894983",
+          "name": "Neo-Aspect",
+          "artistName": "Roselia",
+          "albumName": "Anfang",
+          "durationInMillis": 307290,
+          "isrc": "JP92L2202450"
+        },
+        {
+          "id": "1800118310",
+          "name": "Neo-Aspect (2018 リマスターver.)",
+          "artistName": "Roselia",
+          "albumName": "R - EP",
+          "durationInMillis": 308167,
+          "isrc": "JP92L2202460"
+        },
+        {
+          "id": "1800616671",
+          "name": "Neo-Aspect (instrumental)",
+          "artistName": "Roselia",
+          "albumName": "Roselia Instrumental Collection 1",
+          "durationInMillis": 308933,
+          "isrc": "JPR562100490"
+        }
+      ]
+    },
+    {
+      "track": { "name": "LOUDER", "artists": ["Roselia"], "albumName": "BLACK SHOUT", "durationMs": 214206 },
+      "expectedSelectedId": "1798879671",
+      "candidates": [
+        {
+          "id": "1798426109",
+          "name": "LOUDER",
+          "artistName": "Roselia",
+          "albumName": "Für immer",
+          "durationInMillis": 213967,
+          "isrc": "JPR562400130"
+        },
+        {
+          "id": "1799895292",
+          "name": "LOUDER",
+          "artistName": "Roselia",
+          "albumName": "Anfang",
+          "durationInMillis": 216219,
+          "isrc": "JP92L2202490"
+        },
+        {
+          "id": "1798879671",
+          "name": "LOUDER",
+          "artistName": "Roselia",
+          "albumName": "BLACK SHOUT - EP",
+          "durationInMillis": 216219,
+          "isrc": "JP92L2202490"
+        },
+        {
+          "id": "1798879676",
+          "name": "LOUDER (instrumental)",
+          "artistName": "Roselia",
+          "albumName": "BLACK SHOUT - EP",
+          "durationInMillis": 215533,
+          "isrc": "JP92L2202540"
+        },
+        {
+          "id": "1800616014",
+          "name": "LOUDER (instrumental)",
+          "artistName": "Roselia",
+          "albumName": "Roselia Instrumental Collection 1",
+          "durationInMillis": 215533,
+          "isrc": "JP92L2202540"
+        },
+        {
+          "id": "1800388616",
+          "name": "Song I am.",
+          "artistName": "Roselia",
+          "albumName": "Wahl",
+          "durationInMillis": 242567,
+          "isrc": "JPR561900274"
+        },
+        {
+          "id": "1727014731",
+          "name": "Show Em Up",
+          "artistName": "Better Than Ezra",
+          "albumName": "Super Magick",
+          "durationInMillis": 193213,
+          "isrc": "QMFMF2311152"
+        },
+        {
+          "id": "50229774",
+          "name": "This Time of Year (French Radio Version)",
+          "artistName": "Better Than Ezra",
+          "albumName": "Better Than Ezra: Greatest Hits",
+          "durationInMillis": 299347,
+          "isrc": "USEE10413603"
+        }
+      ]
+    },
+    {
+      "track": { "name": "歩拾道", "artists": ["MyGO!!!!!"], "albumName": "歩拾道", "durationMs": 260280 },
+      "expectedSelectedId": "1775842204",
+      "candidates": [
+        {
+          "id": "1775842204",
+          "name": "歩拾道",
+          "artistName": "MyGO!!!!!",
+          "albumName": "歩拾道 - Single",
+          "durationInMillis": 260280,
+          "isrc": "JPR562400335"
+        },
+        {
+          "id": "1779893136",
+          "name": "歩拾道",
+          "artistName": "MyGO!!!!!",
+          "albumName": "跡暖空",
+          "durationInMillis": 261960,
+          "isrc": "JPR562400335"
+        },
+        {
+          "id": "1779893139",
+          "name": "明弦音",
+          "artistName": "MyGO!!!!!",
+          "albumName": "跡暖空",
+          "durationInMillis": 243920,
+          "isrc": "JPR562400337"
+        }
+      ]
+    },
+    {
+      "track": {
+        "name": "Beautiful Birthday",
+        "artists": ["RAISE A SUILEN"],
+        "albumName": "ERA",
+        "durationMs": 256102
+      },
+      "expectedSelectedId": "1799895953",
+      "candidates": [
+        {
+          "id": "1799933925",
+          "name": "Beautiful Birthday",
+          "artistName": "RAISE A SUILEN",
+          "albumName": "BanG Dream! Dreamer's Best",
+          "durationInMillis": 256102,
+          "isrc": "JPR561900276"
+        },
+        {
+          "id": "1799895953",
+          "name": "Beautiful Birthday",
+          "artistName": "RAISE A SUILEN",
+          "albumName": "ERA",
+          "durationInMillis": 256102,
+          "isrc": "JPR561900276"
+        },
+        {
+          "id": "1803353228",
+          "name": "Beautiful Birthday (3rd Season #11Ver.)",
+          "artistName": "RAISE A SUILEN",
+          "albumName": "アニメ「BanG Dream! 2nd&3rd Season」 (オリジナル・サウンドトラック)",
+          "durationInMillis": 105067,
+          "isrc": "JPR561900194"
+        },
+        {
+          "id": "1798689189",
+          "name": "Beautiful Birthday (Lo-Fi Remix)",
+          "artistName": "RAISE A SUILEN",
+          "albumName": "BanG Dream! Lo-Fi Remix Collection",
+          "durationInMillis": 201259,
+          "isrc": "JPR562300554"
+        }
+      ]
+    },
+    {
+      "track": {
+        "name": "HELL! or HELL?",
+        "artists": ["RAISE A SUILEN"],
+        "albumName": "DRIVE US CRAZY",
+        "durationMs": 282335
+      },
+      "expectedSelectedId": "1798879717",
+      "candidates": [
+        {
+          "id": "1798879717",
+          "name": "HELL! or HELL?",
+          "artistName": "RAISE A SUILEN",
+          "albumName": "DRIVE US CRAZY - Single",
+          "durationInMillis": 282336,
+          "isrc": "JPR561900121"
+        },
+        {
+          "id": "1799934173",
+          "name": "HELL! or HELL?",
+          "artistName": "RAISE A SUILEN",
+          "albumName": "BanG Dream! Dreamer's Best",
+          "durationInMillis": 282336,
+          "isrc": "JPR561900121"
+        },
+        {
+          "id": "1799895951",
+          "name": "HELL! or HELL?",
+          "artistName": "RAISE A SUILEN",
+          "albumName": "ERA",
+          "durationInMillis": 282336,
+          "isrc": "JPR561900121"
+        },
+        {
+          "id": "1779060239",
+          "name": "Bad Kids All Bet",
+          "artistName": "RAISE A SUILEN",
+          "albumName": "Bad Kids All Bet - Single",
+          "durationInMillis": 228567,
+          "isrc": "JPR562400315"
+        }
+      ]
+    }
+  ]
+}

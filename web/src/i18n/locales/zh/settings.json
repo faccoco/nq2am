@@ -27,17 +27,91 @@
   },
   "matching": {
     "title": "匹配",
-    "description": "候选项先按规范化标题距离排序，标题距离相同时优先专辑编辑距离较小的结果。只有标题距离为 0 时才自动匹配；专辑不同的结果会标记为“相同曲目”。",
+    "scoringVersion": "评分模型 v{{version}}",
+    "description": "nq2am 会通过有上限的查询序列检索候选项，把重复发行合并为录音组，并只自动选择明显胜出的录音。自动匹配、复核和间隔阈值锁定在当前评分模型内；合理候选进入「存在歧义」，低于复核阈值的已检索候选进入「评分未通过」。",
     "loading": "正在加载匹配偏好…",
+    "threshold": {
+      "label": "自动匹配阈值：",
+      "help": "调高更安全，但会有更多合理录音进入人工复核。",
+      "tooltip": "录音组必须达到此置信度，并以设置的间隔领先第二名，nq2am 才会自动选择。"
+    },
+    "reviewThreshold": {
+      "label": "复核阈值：",
+      "help": "置信度更低的已检索候选会保留在「评分未通过」。",
+      "tooltip": "最佳录音组必须达到这个较低阈值才会进入「存在歧义」。已检索到候选但所有录音组都低于此值时，结果是「评分未通过」，而不是「未找到」。"
+    },
+    "ambiguityGap": {
+      "label": "录音组间隔：",
+      "help": "调高会让相近录音组更倾向于人工复核，而不是自动选择。",
+      "tooltip": "应用专辑和适用的封面证据后，胜出录音组必须至少领先第二名这个间隔。同一录音的重复发行不会造成虚假歧义。"
+    },
+    "explicit": {
+      "label": "显式 / 干净版本偏好",
+      "options": {
+        "none": "无偏好",
+        "explicit": "优先显式版本",
+        "clean": "优先干净版本"
+      },
+      "help": "只在候选项分数接近时作为决胜规则。",
+      "tooltip": "这个设置不会过滤搜索结果。它只会在显式版和干净版分数接近时先做选择；如果仍不确定，才继续用封面比较或进入人工复核。"
+    },
     "storefront": {
       "label": "店面区域",
       "placeholder": "自动（来自你的账号）",
-      "help": "包含日文假名的歌曲会自动改用日本区；其他歌曲使用这里设置或账号检测到的区域。",
-      "tooltip": "这是普通歌曲搜索使用的 Apple Music 区域，例如 us、jp、cn。标题或艺术家中出现平假名、片假名等日文字符时，搜索区域会自动切换为 jp。"
+      "help": "除非 Apple Music 账号区域检测错了，否则建议留空。",
+      "tooltip": "这是创建最终 Apple Music 歌单时使用的账号区域，例如 us、jp、cn。开启母语区域搜索时，系统仍可能先去 JP/KR/CN 搜索，再通过 ISRC 把选中的歌桥接回你的账号区域。"
+    },
+    "preferDuration": "优先选择时长最接近源歌曲的候选项",
+    "preferDurationTooltip": "当 Apple Music 候选项的时长接近源歌曲时，会给它一个小加分。约 2 秒以内加分最明显，差距到约 30 秒时加分消失。",
+    "preferOriginal": "优先选择原始录音室版本，而非重制 / 现场 / 卡拉OK 版本",
+    "preferOriginalTooltip": "如果候选标题看起来是 remaster、live、karaoke、instrumental、cover、version 或 remix，会扣一点分；但如果源歌曲标题本身也写了这个版本，就不会惩罚。",
+    "nativeSearch": "在母语区域搜索非英文歌曲",
+    "nativeSearchTooltip": "对于日文、韩文、中文元数据，nq2am 可能会先去对应的 Apple Music 区域搜索，因为当地标题和封面通常更准确。如果选中的歌有 ISRC，再找回你账号区域里的同一首歌用于创建歌单。",
+    "nativeSearchHelp": "适合账号区域里的 JP/KR/CN 歌曲信息被罗马音、翻译或缺失时使用。",
+    "cjk": {
+      "label": "中日韩歌曲的区域判定方式",
+      "options": {
+        "source": "按来源（网易/QQ → 中国区）",
+        "text": "按文字（汉字 → 日本区）"
+      },
+      "help": "如果网易/QQ 里有很多日文歌，可以尝试按文字。",
+      "tooltip": "「按来源」仍会给网易/QQ 的纯汉字标题额外搜日本区（例如《炎》），而不是只停在中国区。假名仍是日本区，韩文仍是韩国区。「按文字」会把纯汉字标题优先当日文处理。"
+    },
+    "aliasCatalog": {
+      "title": "艺人别名库",
+      "description": "下载 MusicBrainz（一般艺人）、VocaDB（V家）、UtaiteDB（歌い手）和 TouhouDB（东方）的艺人名称 dump，编译成本地别名索引。dump 会一个一个下，每个 dump 内部分成多段并行下载（这些站点按连接限速，多连接快很多）。中断后再次下载会从断点继续；已经下完且没更新的 dump 会跳过。匹配过程中不会去下载这些 dump。",
+      "download": "下载别名库",
+      "redownload": "重新下载",
+      "downloading": "正在下载…",
+      "downloadingSource": "正在下载 {{source}}…",
+      "listing": "正在查找 dump…",
+      "compiling": "正在编译索引…",
+      "cancel": "取消",
+      "idleNever": "还没有下载别名库。随包别名仍然可用。",
+      "idleReady": "{{count}} 组 · {{sources}}",
+      "downloadedAt": "下载日期：{{date}}",
+      "dumpDate": "数据日期：{{date}}",
+      "failed": "下载失败，仍使用上一份索引。",
+      "cancelled": "已取消下载。",
+      "progressPercent": "{{percent}}%",
+      "progressSize": "{{received}} / {{total}}",
+      "progressSpeed": "{{speed}}/s",
+      "progressEta": "剩余 {{eta}}",
+      "etaHoursMinutes": "{{hours}} 小时 {{minutes}} 分",
+      "etaHours": "{{hours}} 小时",
+      "etaMinutes": "{{minutes}} 分",
+      "etaSeconds": "{{seconds}} 秒",
+      "sources": {
+        "musicbrainz": "MusicBrainz",
+        "vocadb": "VocaDB",
+        "utaitedb": "UtaiteDB",
+        "touhoudb": "TouhouDB"
+      },
+      "tooltip": "日文罗马字或简繁写法对不上时用这个。VocaDB 只覆盖 V家，歌い手走 UtaiteDB，东方走 TouhouDB，其他艺人走 MusicBrainz。不会导入 search hint 和法律名。已经在跑的匹配任务会继续用它开始时的那份索引。"
     },
     "performance": {
       "title": "性能与请求节奏",
-      "description": "这些参数会用于新的匹配、重试、跨区歌曲解析和创建歌单。首次出现连续 429 时会全局暂停 5 秒；请求失败会自动重试 3 次，全部失败后才报告请求失败。",
+      "description": "这些参数会用于新的匹配、重试、跨区歌曲解析和创建歌单。",
       "concurrency": {
         "label": "并行处理歌曲数",
         "help": "范围：1–10。",
@@ -51,12 +125,22 @@
       "requestTimeout": {
         "label": "Apple 请求超时",
         "help": "每一次请求尝试独立计算。",
-        "tooltip": "目录请求超过这个时间后会被视为失败，并自动重试 3 次；4 次尝试全部失败后才报告请求失败。"
+        "tooltip": "目录请求超过这个时间后会被视为临时失败，并按照最大尝试次数决定是否重试。"
+      },
+      "maxAttempts": {
+        "label": "最大尝试次数",
+        "help": "包含第一次请求。",
+        "tooltip": "遇到限流、临时服务器错误或网络超时时允许的总尝试次数。例如 3 表示第一次请求加最多两次重试。"
       },
       "retryDelay": {
         "label": "初始重试等待",
         "help": "每失败一次，等待时间翻倍。",
         "tooltip": "指数退避的基础等待时间。如果 Apple 返回 Retry-After，则优先遵守 Apple 指定的等待时间。"
+      },
+      "artworkTimeout": {
+        "label": "封面处理超时",
+        "help": "下载和解码分别计算。",
+        "tooltip": "下载或解码单张封面允许等待的最长时间。超时后会跳过这张封面的比较，但不会改变元数据评分。"
       },
       "randomPause": {
         "label": "随机请求停顿",
